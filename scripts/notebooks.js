@@ -224,15 +224,34 @@ class NotebookManager {
 
         await user.fetch();
         const subscriptionStatus = user.get('subscriptionStatus');
+        const stripeSubscriptionId = user.get('stripeSubscriptionId');
+        
+        // DEBUG: Log subscription info
+        console.log('🔍 DEBUG canGenerateMore:', {
+            type,
+            subscriptionStatus,
+            stripeSubscriptionId,
+            stripeCustomerId: user.get('stripeCustomerId'),
+            isPaidUser: subscriptionStatus === 'active'
+        });
         
         // Paid users have unlimited generations
         if (subscriptionStatus === 'active') {
+            console.log('✅ User is paid - allowing unlimited generations');
             return { allowed: true };
+        }
+        
+        if (!stripeSubscriptionId) {
+            console.log('⚠️ User has no Stripe subscription ID - treating as free user');
         }
 
         // Free tier: 1 generation per type per notebook
         const generationCount = this.currentNotebook[`${type}Generated`] || 0;
-        if (generationCount >= 1) {
+        
+        // Enforce free tier limits (disable test mode)
+        const allowFreeTier = false; // FREE TIER LIMITS ARE ENFORCED
+        
+        if (generationCount >= 1 && !allowFreeTier) {
             return { 
                 allowed: false, 
                 reason: 'free_tier_limit',
@@ -240,6 +259,7 @@ class NotebookManager {
             };
         }
 
+        console.log(`✅ Allowing ${type} generation`);
         return { allowed: true };
     }
 

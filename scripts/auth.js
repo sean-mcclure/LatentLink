@@ -58,6 +58,31 @@ class AuthManager {
         }
     }
 
+    // Validate session on page load - log out if session is expired
+    async validateSession() {
+        try {
+            const currentUser = Parse.User.current();
+            
+            // If no current user, session is already invalid
+            if (!currentUser) {
+                this.currentUser = null;
+                return { valid: false, message: 'No active session' };
+            }
+
+            // Try to fetch user data - this will fail if session token is expired
+            await currentUser.fetch();
+            this.currentUser = currentUser;
+            console.log('✅ Session valid for user:', currentUser.get('email'));
+            return { valid: true, user: currentUser };
+        } catch (error) {
+            console.warn('⚠️ Session expired or invalid, logging out:', error.message);
+            // Force logout if session is invalid
+            await Parse.User.logOut();
+            this.currentUser = null;
+            return { valid: false, message: 'Session expired - logged out' };
+        }
+    }
+
     // Check subscription status
     async checkSubscription() {
         if (!this.isAuthenticated()) {

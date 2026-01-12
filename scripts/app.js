@@ -27,6 +27,17 @@ async function initializeApp() {
         return;
     }
     
+    // Validate session first - log out if expired (only if user was previously logged in)
+    try {
+        const currentUser = Parse.User.current();
+        if (currentUser) {
+            await authManager.validateSession();
+        }
+    } catch (error) {
+        console.error('Session validation error:', error.message);
+        // Continue even if validation fails - let the user try to log in
+    }
+    
     // Initialize Stripe
     try {
         await subscriptionManager.initialize();
