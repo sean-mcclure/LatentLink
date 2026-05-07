@@ -425,28 +425,35 @@ label {
 
 .graph-shell {
     min-height: 520px;
-    overflow: auto;
+    overflow: hidden;
+    position: relative;
 }
 
-.graph-layout {
-    display: grid;
-    grid-template-columns: 220px minmax(360px, 1fr) 220px;
-    gap: 18px;
-    align-items: start;
+.graph-domain-selector {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
 }
 
-.graph-column {
-    display: grid;
-    gap: 10px;
-}
-
-.graph-node {
+.graph-domain-pill {
     border: 1px solid var(--border);
-    padding: 12px;
     background: rgba(255, 255, 255, 0.02);
+    color: var(--text-muted);
+    padding: 8px 10px;
+    cursor: pointer;
+    font-family: 'DM Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.66rem;
 }
 
-.graph-node.active,
+.graph-domain-pill.active {
+    border-color: var(--border-strong);
+    color: var(--accent);
+    box-shadow: var(--shadow-glow);
+}
+
+.candidate-card.active,
 .candidate-card.active,
 .notebook-card.active,
 .mapping-row.active {
@@ -454,41 +461,118 @@ label {
     box-shadow: var(--shadow-glow);
 }
 
-.graph-node-role {
-    color: var(--accent-2);
-    font-family: 'DM Mono', monospace;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    font-size: 0.68rem;
-    margin-bottom: 6px;
-}
-
-.graph-node-name {
-    font-size: 0.94rem;
-}
-
-.graph-visual {
-    width: 100%;
-    min-height: 480px;
-}
-
-.graph-visual svg {
+.chord-shell {
+    position: relative;
     width: 100%;
     height: 100%;
-    min-height: 480px;
 }
 
-.ribbon-path {
+.chord-diagram {
+    width: 100%;
+    min-height: 520px;
+}
+
+.diagram-chord,
+.stub-path,
+.empty-chord-outline {
     fill: none;
-    opacity: 0.54;
+    stroke-linecap: round;
+}
+
+.diagram-chord {
+    opacity: 0.82;
     cursor: pointer;
     transition: opacity 140ms ease, filter 140ms ease;
 }
 
-.ribbon-path:hover,
-.ribbon-path.active {
-    opacity: 0.96;
-    filter: drop-shadow(0 0 10px rgba(212, 245, 122, 0.25));
+.diagram-chord.active,
+.diagram-chord.highlighted,
+.diagram-chord:hover {
+    opacity: 1;
+    filter: drop-shadow(0 0 8px rgba(212, 245, 122, 0.24));
+}
+
+.diagram-chord.dimmed {
+    opacity: 0.12;
+}
+
+.stub-path,
+.empty-chord-outline {
+    stroke: rgba(240, 237, 232, 0.22);
+    stroke-dasharray: 7 7;
+    stroke-width: 1.4;
+}
+
+.entity-node {
+    cursor: pointer;
+}
+
+.entity-dot {
+    fill: rgba(20, 20, 20, 0.94);
+    stroke: var(--accent-2);
+    stroke-width: 1.4;
+}
+
+.entity-node.unlinked .entity-dot {
+    stroke: rgba(240, 237, 232, 0.28);
+    stroke-dasharray: 3 3;
+}
+
+.entity-node.active .entity-dot {
+    stroke: var(--border-strong);
+    filter: drop-shadow(0 0 8px rgba(212, 245, 122, 0.24));
+}
+
+.entity-label {
+    fill: var(--text-primary);
+    font-size: 13px;
+}
+
+.entity-node.unlinked .entity-label {
+    fill: var(--text-muted);
+}
+
+.entity-hit {
+    fill: transparent;
+}
+
+.graph-tooltip,
+.graph-popover {
+    position: absolute;
+    z-index: 2;
+    background: rgba(20, 20, 20, 0.98);
+    border: 1px solid var(--border-strong);
+    box-shadow: var(--shadow-card);
+}
+
+.graph-tooltip {
+    padding: 8px 10px;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    color: var(--text-primary);
+    pointer-events: none;
+}
+
+.graph-popover {
+    width: 260px;
+    padding: 14px;
+}
+
+.graph-popover h3 {
+    margin: 8px 0;
+    font-size: 1.05rem;
+}
+
+.empty-chord-text,
+.empty-chord-subtext {
+    fill: var(--text-muted);
+    font-size: 13px;
+}
+
+.empty-chord-text {
+    fill: var(--text-primary);
+    font-family: 'DM Serif Display', serif;
+    font-size: 22px;
 }
 
 .verification-chip,
@@ -688,8 +772,7 @@ label {
     .workspace-grid,
     .parallel-layout,
     .auth-grid,
-    .site-header,
-    .graph-layout {
+    .site-header {
         grid-template-columns: 1fr;
     }
 

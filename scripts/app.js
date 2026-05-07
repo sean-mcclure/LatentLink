@@ -9,6 +9,8 @@ const PIPELINE_STEPS = [
 const state = {
     user: null,
     selectedCorrespondenceId: null,
+    selectedDomainKey: null,
+    graphPopover: null,
     analysis: null,
     pipelineStatus: PIPELINE_STEPS.map((step) => ({ ...step, status: 'idle', detail: step.description })),
     notebookList: []
@@ -58,14 +60,12 @@ function setupEventListeners() {
     const analyzeBtn = document.getElementById('analyze-btn');
     const saveSessionBtn = document.getElementById('save-session-btn');
     const newAnalysisBtn = document.getElementById('new-analysis-btn');
-    const rerenderBtn = document.getElementById('rerender-btn');
     const viewNotebooksBtn = document.getElementById('view-notebooks-btn');
     const backToAppBtn = document.getElementById('back-to-app-btn');
 
     analyzeBtn?.addEventListener('click', runAnalysis);
     saveSessionBtn?.addEventListener('click', saveCurrentAnalysis);
     newAnalysisBtn?.addEventListener('click', resetWorkspace);
-    rerenderBtn?.addEventListener('click', rerenderCorrespondences);
     viewNotebooksBtn?.addEventListener('click', showNotebooksView);
     backToAppBtn?.addEventListener('click', showMainApp);
 
@@ -389,7 +389,7 @@ async function runAnalysis() {
         };
 
         state.analysis = analysis;
-        state.selectedCorrespondenceId = analysis.correspondences[0]?.id || null;
+    syncSelectionState();
         notebookManager.updateCurrentNotebook(analysis);
 
         renderAnalysis();
@@ -465,6 +465,8 @@ async function saveCurrentAnalysis() {
 function resetWorkspace() {
     state.analysis = null;
     state.selectedCorrespondenceId = null;
+    state.selectedDomainKey = null;
+    state.graphPopover = null;
     notebookManager.startNewNotebook({});
     resetPipelineStatus();
     document.getElementById('analysis-title').value = '';
@@ -557,7 +559,7 @@ function renderFingerprint() {
         { title: 'Entities', items: fingerprint.entities },
         { title: 'Dynamics', items: fingerprint.dynamics },
         { title: 'Constraints', items: fingerprint.constraints },
-        { title: 'Break-sensitive zones', items: fingerprint.sensitiveZones }
+        { title: 'Caveats', items: fingerprint.sensitiveZones }
     ];
 
     gridEl.innerHTML = cards.map((card) => `
@@ -579,8 +581,9 @@ function renderCandidates() {
     }
 
     container.classList.remove('empty-state-inline');
-    container.innerHTML = state.analysis.candidates.map((candidate, index) => `
-        <article class="candidate-card ${index === 0 ? 'active' : ''}">
+    const selectedDomainKey = getSelectedDomainKey();
+    container.innerHTML = state.analysis.candidates.map((candidate) => `
+        <article class="candidate-card ${getDomainKey(candidate) === selectedDomainKey ? 'active' : ''}" data-domain-key="${escapeHtml(getDomainKey(candidate))}">
             <span class="pill">${escapeHtml(candidate.domain)}</span>
             <h3>${escapeHtml(candidate.label)}</h3>
             <p>${escapeHtml(candidate.rationale)}</p>
@@ -589,55 +592,80 @@ function renderCandidates() {
             </ul>
         </article>
     `).join('');
-}
 
-function renderGraph() {
-    const container = document.getElementById('graph-shell');
-    if (!state.analysis?.correspondences?.length) {
-        container.classList.add('empty-state-inline');
-        container.textContent = 'Proposed correspondences will render here once the analysis completes.';
-        return;
-    }
-
-    container.classList.remove('empty-state-inline');
-    const correspondences = state.analysis.correspondences;
-    const sourceNodes = collectNodes(correspondences, 'source');
-    const targetNodes = collectNodes(correspondences, 'target');
-    const width = 520;
-    const height = Math.max(520, Math.max(sourceNodes.length, targetNodes.length) * 92);
-
-    const sourceLayout = sourceNodes.map((node, index) => ({ ...node, y: 50 + index * ((height - 100) / Math.max(sourceNodes.length - 1, 1)) }));
-    const targetLayout = targetNodes.map((node, index) => ({ ...node, y: 50 + index * ((height - 100) / Math.max(targetNodes.length - 1, 1)) }));
-
-    container.innerHTML = `
-        <div class="graph-layout">
-            <div class="graph-column">${sourceLayout.map((node) => renderNodeCard(node, 'source')).join('')}</div>
-            <div class="graph-visual">
-                <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMin meet">
-                    <text x="24" y="24" class="graph-label" fill="#d4f57a">User Domain</text>
-                    <text x="${width - 158}" y="24" class="graph-label" fill="#7af5c8">Analog Domain</text>
-                    ${correspondences.map((correspondence) => {
-                        const source = sourceLayout.find((node) => node.name === correspondence.sourceRole.name);
-                        const target = targetLayout.find((node) => node.name === correspondence.targetRole.name);
-                        const path = createRibbonPath(120, source.y, width - 120, target.y);
-                        const stroke = verificationColor(correspondence.verification.status);
-                        const activeClass = correspondence.id === state.selectedCorrespondenceId ? 'active' : '';
-                        const strokeWidth = Math.max(3, Math.round((correspondence.confidence || 0.5) * 10));
-                        return `<path class="ribbon-path ${activeClass}" data-id="${correspondence.id}" d="${path}" stroke="${stroke}" stroke-width="${strokeWidth}"></path>`;
-                    }).join('')}
-                </svg>
-            </div>
-            <div class="graph-column">${targetLayout.map((node) => renderNodeCard(node, 'target')).join('')}</div>
-        </div>
-    `;
-
-    container.querySelectorAll('.ribbon-path').forEach((path) => {
-        path.addEventListener('click', () => {
-            state.selectedCorrespondenceId = path.getAttribute('data-id');
+    container.querySelectorAll('.candidate-card').forEach((card) => {
+        card.addEventListener('click', () => {
+            state.selectedDomainKey = card.getAttribute('data-domain-key');
+            state.graphPopover = null;
+            state.selectedCorrespondenceId = getCorrespondencesForSelectedDomain()[0]?.id || state.selectedCorrespondenceId;
+            renderCandidates();
             renderGraph();
             renderDetailPanel();
         });
     });
+}
+
+function renderGraph() {
+    const container = document.getElementById('graph-shell');
+    const selector = document.getElementById('graph-domain-selector');
+    if (!state.analysis?.correspondences?.length) {
+        container.classList.add('empty-state-inline');
+        container.textContent = 'Proposed correspondences will render here once the analysis completes.';
+        selector.innerHTML = '';
+        return;
+    }
+
+    syncSelectionState();
+
+    container.classList.remove('empty-state-inline');
+    const domains = getAvailableAnalogDomains();
+    selector.innerHTML = domains.map((domain) => `
+        <button class="graph-domain-pill ${domain.key === state.selectedDomainKey ? 'active' : ''}" data-domain-key="${escapeHtml(domain.key)}">${escapeHtml(domain.label)}</button>
+    `).join('');
+
+    selector.querySelectorAll('.graph-domain-pill').forEach((button) => {
+        button.addEventListener('click', () => {
+            state.selectedDomainKey = button.getAttribute('data-domain-key');
+            state.graphPopover = null;
+            state.selectedCorrespondenceId = getCorrespondencesForSelectedDomain()[0]?.id || state.selectedCorrespondenceId;
+            renderCandidates();
+            renderGraph();
+            renderDetailPanel();
+        });
+    });
+
+    const selectedDomain = domains.find((domain) => domain.key === state.selectedDomainKey) || domains[0];
+    const correspondences = getCorrespondencesForSelectedDomain();
+    const sourceNodes = buildSourceNodes(correspondences);
+    const targetNodes = buildTargetNodes(correspondences, selectedDomain);
+    const width = 860;
+    const height = Math.max(520, Math.max(sourceNodes.length, targetNodes.length, 4) * 76 + 120);
+    const leftX = 130;
+    const rightX = width - 130;
+    const leftStubX = width / 2 - 110;
+    const rightStubX = width / 2 + 110;
+
+    const sourceLayout = layoutNodes(sourceNodes, leftX, height, 'source');
+    const targetLayout = layoutNodes(targetNodes, rightX, height, 'target');
+    const linkedSourceNames = new Set(correspondences.map((item) => item.sourceRole.name));
+    const linkedTargetNames = new Set(correspondences.map((item) => item.targetRole.name));
+    const noChords = correspondences.length === 0;
+
+    container.innerHTML = `
+        <div class="chord-shell">
+            <svg class="chord-diagram" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMin meet">
+                <text x="42" y="34" class="graph-label" fill="#d4f57a">User domain</text>
+                <text x="${width - 210}" y="34" class="graph-label" fill="#7af5c8">${escapeHtml(selectedDomain?.label || 'Analog domain')}</text>
+                ${renderNodeGuides(sourceLayout, targetLayout, leftStubX, rightStubX, linkedSourceNames, linkedTargetNames)}
+                ${noChords ? renderEmptyChordState(width, height) : renderChords(correspondences, sourceLayout, targetLayout)}
+                ${renderNodeMarks(sourceLayout, linkedSourceNames, 'source')}
+                ${renderNodeMarks(targetLayout, linkedTargetNames, 'target')}
+            </svg>
+            ${state.graphPopover ? renderGraphPopover(state.graphPopover) : ''}
+        </div>
+    `;
+
+    attachGraphInteractions(container, sourceLayout, targetLayout, correspondences);
 }
 
 function renderDetailPanel() {
@@ -661,7 +689,7 @@ function renderDetailPanel() {
                 <h3>${escapeHtml(selected.label)}</h3>
                 <p>${escapeHtml(selected.summary)}</p>
                 <ul class="detail-list">
-                    <li><span>Confidence:</span> ${Math.round((selected.confidence || 0) * 100)}%</li>
+                    <li><span>Confidence:</span> ${Math.round(normalizeConfidence(selected.confidence) * 100)}%</li>
                     <li><span>Break-points:</span> ${(selected.breakpoints || []).map(escapeHtml).join('; ') || 'None recorded.'}</li>
                 </ul>
             </section>
@@ -758,7 +786,7 @@ function renderNotebookLibrary() {
                 return;
             }
             state.analysis = notebook;
-            state.selectedCorrespondenceId = notebook.correspondences?.[0]?.id || null;
+            syncSelectionState();
             state.pipelineStatus = notebook.pipeline?.length ? notebook.pipeline : state.pipelineStatus;
             renderPipelineStatus();
             renderAnalysis();
@@ -821,11 +849,12 @@ function markRunningStepAsError(message) {
 }
 
 function getSelectedCorrespondence() {
-    if (!state.analysis?.correspondences?.length) {
+    const scopedCorrespondences = getCorrespondencesForSelectedDomain();
+    if (!scopedCorrespondences.length) {
         return null;
     }
 
-    return state.analysis.correspondences.find((item) => item.id === state.selectedCorrespondenceId) || state.analysis.correspondences[0];
+    return scopedCorrespondences.find((item) => item.id === state.selectedCorrespondenceId) || scopedCorrespondences[0];
 }
 
 function collectNodes(correspondences, side) {
@@ -837,6 +866,233 @@ function collectNodes(correspondences, side) {
         }
     });
     return [...map.values()];
+}
+
+function getAvailableAnalogDomains() {
+    const candidateDomains = (state.analysis?.candidates || []).map((candidate) => ({
+        key: getDomainKey(candidate),
+        label: candidate.label || candidate.domain,
+        domain: candidate.domain
+    }));
+    const correspondenceDomains = (state.analysis?.correspondences || []).reduce((items, correspondence) => {
+        const key = getDomainKey(correspondence);
+        if (!items.some((item) => item.key === key)) {
+            items.push({ key, label: correspondence.analogDomain || correspondence.label, domain: correspondence.analogDomain || correspondence.label });
+        }
+        return items;
+    }, []);
+
+    return [...candidateDomains, ...correspondenceDomains].filter((item, index, array) => array.findIndex((entry) => entry.key === item.key) === index);
+}
+
+function getDomainKey(item) {
+    return (item?.domain || item?.analogDomain || item?.label || 'analog-domain').toLowerCase();
+}
+
+function getSelectedDomainKey() {
+    if (state.selectedDomainKey) {
+        return state.selectedDomainKey;
+    }
+    return getAvailableAnalogDomains()[0]?.key || null;
+}
+
+function getCorrespondencesForSelectedDomain() {
+    const selectedDomainKey = getSelectedDomainKey();
+    return (state.analysis?.correspondences || []).filter((item) => getDomainKey(item) === selectedDomainKey);
+}
+
+function syncSelectionState() {
+    const correspondences = state.analysis?.correspondences || [];
+    if (!correspondences.length) {
+        state.selectedDomainKey = null;
+        state.selectedCorrespondenceId = null;
+        return;
+    }
+
+    const highestConfidence = [...correspondences].sort((left, right) => normalizeConfidence(right.confidence) - normalizeConfidence(left.confidence))[0];
+    if (!state.selectedDomainKey) {
+        state.selectedDomainKey = getDomainKey(highestConfidence);
+    }
+
+    const selectedDomainCorrespondences = getCorrespondencesForSelectedDomain();
+    if (!selectedDomainCorrespondences.some((item) => item.id === state.selectedCorrespondenceId)) {
+        state.selectedCorrespondenceId = selectedDomainCorrespondences[0]?.id || highestConfidence.id;
+    }
+}
+
+function buildSourceNodes(correspondences) {
+    const fingerprintEntities = (state.analysis?.fingerprint?.entities || []).map((entity) => ({
+        name: entity,
+        roleType: 'manuscript entity'
+    }));
+    const correspondenceNodes = collectNodes(correspondences, 'source');
+    const sourceMap = new Map();
+    [...fingerprintEntities, ...correspondenceNodes].forEach((node) => {
+        if (!sourceMap.has(node.name)) {
+            sourceMap.set(node.name, node);
+        }
+    });
+    return [...sourceMap.values()];
+}
+
+function buildTargetNodes(correspondences, selectedDomain) {
+    const candidate = (state.analysis?.candidates || []).find((item) => getDomainKey(item) === selectedDomain?.key);
+    const anchorTerms = (candidate?.anchorTerms || []).map((term) => ({
+        name: term,
+        roleType: 'analog term'
+    }));
+    const targetNodes = collectNodes(correspondences, 'target');
+    const targetMap = new Map();
+    [...targetNodes, ...anchorTerms].forEach((node) => {
+        if (!targetMap.has(node.name)) {
+            targetMap.set(node.name, node);
+        }
+    });
+    return [...targetMap.values()];
+}
+
+function layoutNodes(nodes, x, height, side) {
+    const centralityMap = new Map();
+    const domainCorrespondences = getCorrespondencesForSelectedDomain();
+    domainCorrespondences.forEach((item) => {
+        const key = side === 'source' ? item.sourceRole.name : item.targetRole.name;
+        centralityMap.set(key, (centralityMap.get(key) || 0) + 1);
+    });
+    return nodes.map((node, index) => ({
+        ...node,
+        x,
+        y: 72 + index * ((height - 144) / Math.max(nodes.length - 1, 1)),
+        radius: 7 + Math.min(centralityMap.get(node.name) || 0, 3)
+    }));
+}
+
+function renderNodeGuides(sourceLayout, targetLayout, leftStubX, rightStubX, linkedSourceNames, linkedTargetNames) {
+    const leftStubs = sourceLayout
+        .filter((node) => !linkedSourceNames.has(node.name))
+        .map((node) => `<path class="stub-path" d="${createRibbonPath(node.x, node.y, leftStubX, node.y)}"></path>`)
+        .join('');
+    const rightStubs = targetLayout
+        .filter((node) => !linkedTargetNames.has(node.name))
+        .map((node) => `<path class="stub-path" d="${createRibbonPath(rightStubX, node.y, node.x, node.y)}"></path>`)
+        .join('');
+    return `${leftStubs}${rightStubs}`;
+}
+
+function renderChords(correspondences, sourceLayout, targetLayout) {
+    return correspondences.map((correspondence) => {
+        const source = sourceLayout.find((node) => node.name === correspondence.sourceRole.name);
+        const target = targetLayout.find((node) => node.name === correspondence.targetRole.name);
+        if (!source || !target) {
+            return '';
+        }
+        const activeClass = correspondence.id === state.selectedCorrespondenceId ? 'active' : '';
+        const strokeWidth = 2 + normalizeConfidence(correspondence.confidence) * 9;
+        return `
+            <path
+                class="diagram-chord ${activeClass}"
+                data-id="${correspondence.id}"
+                data-source="${escapeHtml(source.name)}"
+                data-target="${escapeHtml(target.name)}"
+                d="${createRibbonPath(source.x, source.y, target.x, target.y)}"
+                stroke="${verificationColor(correspondence.verification.status)}"
+                stroke-width="${strokeWidth.toFixed(2)}"
+            ></path>
+        `;
+    }).join('');
+}
+
+function renderNodeMarks(nodes, linkedNames, side) {
+    return nodes.map((node) => `
+        <g class="entity-node ${linkedNames.has(node.name) ? '' : 'unlinked'}" data-side="${side}" data-name="${escapeHtml(node.name)}">
+            <circle class="entity-dot" cx="${node.x}" cy="${node.y}" r="${node.radius}"></circle>
+            <text class="entity-label entity-label-${side}" x="${side === 'source' ? node.x - 18 : node.x + 18}" y="${node.y + 4}" text-anchor="${side === 'source' ? 'end' : 'start'}">${escapeHtml(node.name)}</text>
+            <circle class="entity-hit" cx="${node.x}" cy="${node.y}" r="${Math.max(node.radius + 18, 22)}"></circle>
+        </g>
+    `).join('');
+}
+
+function renderEmptyChordState(width, height) {
+    return `
+        <g>
+            <path class="empty-chord-outline" d="M ${width / 2 - 120} ${height / 2 - 70} C ${width / 2 - 10} ${height / 2 - 70}, ${width / 2 + 10} ${height / 2 + 70}, ${width / 2 + 120} ${height / 2 + 70}"></path>
+            <text x="${width / 2}" y="${height / 2 - 8}" text-anchor="middle" class="empty-chord-text">No structural correspondence held up under verification</text>
+            <text x="${width / 2}" y="${height / 2 + 18}" text-anchor="middle" class="empty-chord-subtext">Caveats dominate this domain pairing.</text>
+        </g>
+    `;
+}
+
+function renderGraphPopover(popover) {
+    return `
+        <div class="graph-popover" style="left:${popover.x}px; top:${popover.y}px;">
+            <span class="detail-label">${escapeHtml(popover.side)} entity</span>
+            <h3>${escapeHtml(popover.name)}</h3>
+            <p>${escapeHtml(popover.description)}</p>
+            <ul class="detail-list">
+                ${popover.chords.map((item) => `<li>${escapeHtml(item)}</li>`).join('')}
+            </ul>
+        </div>
+    `;
+}
+
+function attachGraphInteractions(container, sourceLayout, targetLayout, correspondences) {
+    const allChords = [...container.querySelectorAll('.diagram-chord')];
+    const allNodes = [...container.querySelectorAll('.entity-node')];
+
+    const clearHighlights = () => {
+        allChords.forEach((chord) => chord.classList.remove('dimmed', 'highlighted'));
+        allNodes.forEach((node) => node.classList.remove('active'));
+        container.querySelector('.graph-tooltip')?.remove();
+    };
+
+    allChords.forEach((chord) => {
+        chord.addEventListener('click', () => {
+            state.selectedCorrespondenceId = chord.getAttribute('data-id');
+            state.graphPopover = null;
+            renderGraph();
+            renderDetailPanel();
+        });
+    });
+
+    allNodes.forEach((node) => {
+        const nodeName = node.getAttribute('data-name');
+        const matchingChords = allChords.filter((chord) => chord.getAttribute('data-source') === nodeName || chord.getAttribute('data-target') === nodeName);
+
+        node.addEventListener('mouseenter', (event) => {
+            allChords.forEach((chord) => chord.classList.add('dimmed'));
+            matchingChords.forEach((chord) => chord.classList.remove('dimmed'));
+            matchingChords.forEach((chord) => chord.classList.add('highlighted'));
+            node.classList.add('active');
+
+            const tooltip = document.createElement('div');
+            tooltip.className = 'graph-tooltip';
+            tooltip.textContent = nodeName;
+            tooltip.style.left = `${event.offsetX + 16}px`;
+            tooltip.style.top = `${event.offsetY + 12}px`;
+            container.querySelector('.chord-shell')?.appendChild(tooltip);
+        });
+
+        node.addEventListener('mouseleave', clearHighlights);
+        node.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const related = correspondences.filter((item) => item.sourceRole.name === nodeName || item.targetRole.name === nodeName);
+            state.graphPopover = {
+                side: node.getAttribute('data-side') === 'source' ? 'User domain' : 'Analog domain',
+                name: nodeName,
+                description: related.length ? `${related.length} mapped correspondence${related.length === 1 ? '' : 's'} involve this entity.` : 'No verified correspondence currently touches this entity.',
+                chords: related.length ? related.map((item) => `${item.sourceRole.name} -> ${item.targetRole.name}`) : ['Visible as a gap / caveat in this pairing.'],
+                x: Math.min(event.offsetX + 20, container.clientWidth - 280),
+                y: Math.min(event.offsetY + 20, container.clientHeight - 220)
+            };
+            renderGraph();
+        });
+    });
+
+    container.querySelector('.chord-shell')?.addEventListener('click', () => {
+        if (state.graphPopover) {
+            state.graphPopover = null;
+            renderGraph();
+        }
+    });
 }
 
 function renderNodeCard(node, side) {
@@ -861,6 +1117,27 @@ function verificationColor(status) {
         return '#ff7878';
     }
     return '#ffc96b';
+}
+
+function normalizeConfidence(value) {
+    if (value === null || value === undefined || value === '') {
+        return 0;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value > 1 ? Math.min(value / 100, 1) : Math.max(value, 0);
+    }
+    if (typeof value === 'string') {
+        const cleaned = value.replace('%', '').trim();
+        const parsed = Number.parseFloat(cleaned);
+        if (Number.isFinite(parsed)) {
+            return parsed > 1 ? Math.min(parsed / 100, 1) : Math.max(parsed, 0);
+        }
+        const lowered = cleaned.toLowerCase();
+        if (lowered.includes('high')) return 0.85;
+        if (lowered.includes('medium')) return 0.6;
+        if (lowered.includes('low')) return 0.35;
+    }
+    return 0;
 }
 
 function summarizeVerificationCounts(summary) {
@@ -956,7 +1233,7 @@ function createCorrespondencesPayload(correspondences) {
         analogDomain: correspondence.analogDomain,
         summary: correspondence.summary,
         reasoning: correspondence.reasoning,
-        confidence: correspondence.confidence,
+        confidence: normalizeConfidence(correspondence.confidence),
         sourceRole: correspondence.sourceRole,
         targetRole: correspondence.targetRole,
         mappingExplanation: correspondence.mappingExplanation,
