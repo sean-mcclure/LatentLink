@@ -1,0 +1,19 @@
+Kedion Brand Colors
+Background: #0c0c0c (primary bg), #141414 (surface), #1c1c1c (surface2)
+Border/divider: #2a2a2a
+Accent green (primary): #d4f57a — used for CTAs, highlights, active states
+Accent teal (secondary): #7af5c8 — used for tags, secondary highlights
+Text primary: #f0ede8
+Text muted: #9a9a9a
+Fonts
+Serif: DM Serif Display — headlines, section titles
+Mono: DM Mono — labels, code, nav links, tags, pricing, UI chrome
+Sans: Instrument Sans — body copy, descriptions
+Key UI details
+
+No border-radius anywhere — everything is sharp/square
+Hover effects: translateY(-2px) lift + green box-shadow glow
+Active/featured borders use the accent green #d4f57a
+Noise texture overlay at ~40% opacity on the body
+Section labels: mono, 11–12px, #d4f57a, 0.15–0.2em letter-spacing, uppercase
+Buttons: solid accent green with #0c0c0c text (primary), or transparent with border (secondary)

@@ -3,410 +3,289 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; font-src 'self' https://fonts.gstatic.com https://m.stripe.network data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' https://js.stripe.com https://npmcdn.com https://unpkg.com https://d3js.org; connect-src 'self' https://parseapi.back4app.com https://api.openai.com https://export.arxiv.org; img-src 'self' data:">
-    <title>LatentLink - Cross-Domain Research Discovery</title>
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🔗</text></svg>">
-    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; font-src 'self' https://fonts.gstatic.com https://m.stripe.network data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' https://js.stripe.com https://unpkg.com; connect-src 'self' https://parseapi.back4app.com https://api.openai.com https://export.arxiv.org https://api.openalex.org https://api.semanticscholar.org https://m.stripe.network https://api.stripe.com https://unpkg.com; frame-src 'self' https://js.stripe.com https://hooks.stripe.com; worker-src 'self' blob: https://unpkg.com; img-src 'self' data:">
+    <title>LatentLink v2</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%230c0c0c%22/><text x=%2250%22 y=%2266%22 text-anchor=%22middle%22 font-size=%2254%22 fill=%22%23d4f57a%22>LL</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Serif+Display:ital@0;1&family=Instrument+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
-    
-    <!-- Parse SDK -->
+
     <script src="https://unpkg.com/parse@3.4.4/dist/parse.min.js"></script>
-    
-    <!-- D3.js for chord diagrams -->
-    <script src="https://d3js.org/d3.v7.min.js"></script>
-    
-    <!-- Stripe.js -->
     <script src="https://js.stripe.com/v3/"></script>
+    <script type="module">
+        import * as pdfjsLib from 'https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.mjs';
+
+        window.pdfjsLib = pdfjsLib;
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs';
+    </script>
 </head>
 <body>
-    <!-- Background Canvas for Dots Animation -->
     <canvas id="dots-canvas"></canvas>
-    <div class="app-container">
-        <!-- Header -->
-        <header class="header">
-            <div class="header-content">
-                <img src="logo.webp" alt="LatentLink Logo" class="logo">
-                <h1 class="title">LatentLink</h1>
-                <p class="subtitle">Discover deep connections across research domains</p>
+
+    <div class="app-shell">
+        <header class="site-header">
+            <div>
+                <p class="section-label">LatentLink v2</p>
+                <h1 class="hero-title">Surface the structural correspondences already implicit in your manuscript.</h1>
+            </div>
+            <div class="hero-copy">
+                <p class="hero-text">Upload a draft, notes, or outline. LatentLink extracts the structural fingerprint, proposes analog domains, verifies each correspondence against the literature, and renders the result in your own formal language.</p>
+                <div class="hero-tags">
+                    <span class="tag">Manuscript-first</span>
+                    <span class="tag">Verification-aware</span>
+                    <span class="tag">Field-native rendering</span>
+                </div>
             </div>
         </header>
 
-        <!-- Auth Section (Login/Signup) -->
-        <div id="auth-section" class="section auth-section">
-            <div class="card">
-                <div id="login-view">
-                    <h2>Welcome to LatentLink</h2>
-                    <p class="hint">Sign in to discover deep connections across research domains</p>
-                    
-                    <div class="auth-form">
-                        <div class="form-group">
-                            <label>Email</label>
-                            <input type="email" id="login-email" class="input" placeholder="your@email.com">
+        <div id="auth-section" class="auth-shell section-panel">
+            <div class="auth-grid">
+                <div class="auth-intro panel-block accent-border">
+                    <p class="section-label">Entry</p>
+                    <h2>Research in, structure out.</h2>
+                    <p class="muted-copy">v2 removes the generic domain picker. The only starting point is your own work.</p>
+                    <div class="feature-column">
+                        <div>
+                            <span class="mini-label">1</span>
+                            <p>Upload a manuscript, markdown notes, or paste working text.</p>
                         </div>
-                        <div class="form-group">
-                            <label>Password</label>
-                            <input type="password" id="login-password" class="input" placeholder="••••••••">
+                        <div>
+                            <span class="mini-label">2</span>
+                            <p>Inspect the extracted structural fingerprint before trusting cross-domain matches.</p>
                         </div>
-                        <button id="login-btn" class="btn btn-primary btn-large">Sign In</button>
-                        <p class="auth-switch">
-                            Don't have an account? <a href="#" id="show-signup">Sign up</a>
-                        </p>
-                        <p class="auth-switch">
-                            <a href="#" id="forgot-password">Forgot password?</a>
-                        </p>
+                        <div>
+                            <span class="mini-label">3</span>
+                            <p>Drill from correspondence ribbon to verification evidence and field-specific rendering.</p>
+                        </div>
                     </div>
                 </div>
 
-                <div id="signup-view" style="display: none;">
-                    <h2>Create Your Account</h2>
-                    <p class="hint">Start discovering cross-domain connections</p>
-                    
-                    <div class="auth-form">
-                        <div class="form-group">
-                            <label>Name</label>
-                            <input type="text" id="signup-name" class="input" placeholder="Your name">
+                <div class="panel-block">
+                    <div id="login-view">
+                        <p class="section-label">Sign In</p>
+                        <h2>Continue your analysis workspace</h2>
+                        <p class="hint">Use your existing LatentLink account.</p>
+
+                        <div class="auth-form">
+                            <div class="form-group">
+                                <label for="login-email">Email</label>
+                                <input type="email" id="login-email" class="input" placeholder="your@email.com">
+                            </div>
+                            <div class="form-group">
+                                <label for="login-password">Password</label>
+                                <input type="password" id="login-password" class="input" placeholder="••••••••">
+                            </div>
+                            <button id="login-btn" class="btn btn-primary btn-large">Sign In</button>
+                            <p class="auth-switch">Need an account? <a href="#" id="show-signup">Create one</a></p>
+                            <p class="auth-switch"><a href="#" id="forgot-password">Forgot password?</a></p>
                         </div>
-                        <div class="form-group">
-                            <label>Email</label>
-                            <input type="email" id="signup-email" class="input" placeholder="your@email.com">
+                    </div>
+
+                    <div id="signup-view" style="display: none;">
+                        <p class="section-label">Create Account</p>
+                        <h2>Open a new analysis workspace</h2>
+                        <p class="hint">Free accounts can save up to 3 analysis sessions.</p>
+
+                        <div class="auth-form">
+                            <div class="form-group">
+                                <label for="signup-name">Name</label>
+                                <input type="text" id="signup-name" class="input" placeholder="Your name">
+                            </div>
+                            <div class="form-group">
+                                <label for="signup-email">Email</label>
+                                <input type="email" id="signup-email" class="input" placeholder="your@email.com">
+                            </div>
+                            <div class="form-group">
+                                <label for="signup-password">Password</label>
+                                <input type="password" id="signup-password" class="input" placeholder="••••••••">
+                            </div>
+                            <button id="signup-btn" class="btn btn-primary btn-large">Create Account</button>
+                            <p class="auth-switch">Already have an account? <a href="#" id="show-login">Sign in</a></p>
                         </div>
-                        <div class="form-group">
-                            <label>Password</label>
-                            <input type="password" id="signup-password" class="input" placeholder="••••••••">
-                        </div>
-                        <button id="signup-btn" class="btn btn-primary btn-large">Create Account</button>
-                        <p class="auth-switch">
-                            Already have an account? <a href="#" id="show-login">Sign in</a>
-                        </p>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Subscription Required Section -->
-        <div id="subscription-section" class="section" style="display: none;">
-            <div class="card">
-                <h2>🚀 Subscribe to LatentLink</h2>
-                <p class="hint">Unlock AI-powered cross-domain discovery</p>
-                
-                <div class="pricing-card">
-                    <div class="price">$9.99<span class="period">/month</span></div>
-                    <ul class="features-list">
-                        <li>✓ Up to 100 discoveries per month</li>
-                        <li>✓ AI-powered analogical reasoning</li>
-                        <li>✓ Cross-domain pattern extraction</li>
-                        <li>✓ Hypothesis generation</li>
-                        <li>✓ Access to all research domains</li>
-                    </ul>
-                    <button id="subscribe-btn" class="btn btn-primary btn-large">Subscribe Now</button>
+        <div id="subscription-section" class="section-panel" style="display: none;">
+            <div class="panel-block pricing-shell accent-border">
+                <p class="section-label">Subscription</p>
+                <h2>Upgrade for ongoing runs</h2>
+                <p class="hint">Premium keeps unlimited saved analyses and a larger monthly run budget.</p>
+                <div class="pricing-row">
+                    <div>
+                        <div class="price">$9.99<span>/month</span></div>
+                        <p class="muted-copy">Keep the existing Stripe subscription flow while the v2 engine ships.</p>
+                    </div>
+                    <button id="subscribe-btn" class="btn btn-primary">Subscribe</button>
                 </div>
-                
-                <p class="hint-small">Cancel anytime. No long-term commitment.</p>
             </div>
         </div>
 
-        <!-- Notebooks View -->
-        <div id="notebooks-view" style="display: none;">
-            <section class="section">
-                <div class="card">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                        <h2>📚 My Notebooks</h2>
-                        <button id="back-to-app-btn" class="btn btn-secondary">← Back to Discovery</button>
+        <div id="notebooks-view" class="section-panel" style="display: none;">
+            <div class="panel-block">
+                <div class="panel-header-row">
+                    <div>
+                        <p class="section-label">Session Library</p>
+                        <h2>Saved analyses</h2>
                     </div>
-                    <p class="hint">Your saved discovery sessions</p>
-                    <div id="notebooks-list" class="notebooks-list"></div>
+                    <button id="back-to-app-btn" class="btn btn-secondary">Back To Workspace</button>
                 </div>
-            </section>
+                <div id="notebooks-list" class="notebooks-grid"></div>
+            </div>
         </div>
 
-        <!-- Main App (hidden until API key is set) -->
-        <div id="main-app" style="display: none;">
-            <!-- Cross-Domain Search Section -->
-            <section class="section">
-                <div class="card">
-                    <h2>🔬 Cross-Domain Discovery</h2>
-                    <p class="hint">Uncover latent similarities between disparate research fields through AI-powered analogical reasoning</p>
-                    
-                    <div class="domain-search-container">
-                        <!-- Domain 1 -->
-                        <div class="domain-search-box">
-                            <h3>Domain 1</h3>
-                            <div class="form-group">
-                                <label>Research Area</label>
-                                <select class="domain-category select" data-domain="1">
-                                    <optgroup label="Computer Science">
-                                        <option value="cs.AI">AI & Machine Learning</option>
-                                        <option value="cs.LG">Machine Learning</option>
-                                        <option value="cs.CV">Computer Vision</option>
-                                        <option value="cs.CL">Natural Language Processing</option>
-                                        <option value="cs.RO">Robotics</option>
-                                        <option value="cs.NE">Neural Networks</option>
-                                        <option value="cs.CR">Cryptography & Security</option>
-                                        <option value="cs.DS">Data Structures & Algorithms</option>
-                                        <option value="cs.HC">Human-Computer Interaction</option>
-                                    </optgroup>
-                                    <optgroup label="Physics">
-                                        <option value="physics.bio-ph">Biological Physics</option>
-                                        <option value="physics.chem-ph">Chemical Physics</option>
-                                        <option value="physics.comp-ph">Computational Physics</option>
-                                        <option value="astro-ph">Astrophysics</option>
-                                        <option value="cond-mat.stat-mech">Statistical Mechanics</option>
-                                        <option value="cond-mat.soft">Soft Condensed Matter</option>
-                                        <option value="cond-mat.mtrl-sci">Materials Science</option>
-                                        <option value="quant-ph">Quantum Physics</option>
-                                    </optgroup>
-                                    <optgroup label="Biology">
-                                        <option value="q-bio.NC">Neuroscience</option>
-                                        <option value="q-bio.CB">Cell Biology</option>
-                                        <option value="q-bio.MN">Molecular Networks</option>
-                                        <option value="q-bio.BM">Biomolecules</option>
-                                        <option value="q-bio.PE">Populations & Evolution</option>
-                                        <option value="q-bio.QM">Quantitative Methods</option>
-                                    </optgroup>
-                                    <optgroup label="Mathematics">
-                                        <option value="math.DS">Dynamical Systems</option>
-                                        <option value="math.OC">Optimization & Control</option>
-                                        <option value="math.PR">Probability</option>
-                                        <option value="math.ST">Statistics</option>
-                                        <option value="math.NA">Numerical Analysis</option>
-                                    </optgroup>
-                                    <optgroup label="Other">
-                                        <option value="nlin.AO">Nonlinear Dynamics</option>
-                                        <option value="stat.ML">Statistics - ML</option>
-                                        <option value="econ.TH">Economics - Theory</option>
-                                        <option value="eess.SP">Signal Processing</option>
-                                    </optgroup>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Topic/Concept</label>
-                                <input type="text" class="domain-query input" data-domain="1" placeholder="e.g., attention mechanisms">
-                            </div>
+        <main id="main-app" class="workspace-grid" style="display: none;">
+            <section class="intake-column section-panel">
+                <div class="panel-block accent-border">
+                    <div class="panel-header-row">
+                        <div>
+                            <p class="section-label">Intake</p>
+                            <h2>Start from your manuscript</h2>
                         </div>
+                        <button id="new-analysis-btn" class="btn btn-secondary">Reset</button>
+                    </div>
 
-                        <!-- Domain 2 -->
-                        <div class="domain-search-box">
-                            <h3>Domain 2</h3>
-                            <div class="form-group">
-                                <label>Research Area</label>
-                                <select class="domain-category select" data-domain="2">
-                                    <optgroup label="Computer Science">
-                                        <option value="cs.AI">AI & Machine Learning</option>
-                                        <option value="cs.LG">Machine Learning</option>
-                                        <option value="cs.CV">Computer Vision</option>
-                                        <option value="cs.CL">Natural Language Processing</option>
-                                        <option value="cs.RO">Robotics</option>
-                                        <option value="cs.NE">Neural Networks</option>
-                                        <option value="cs.CR">Cryptography & Security</option>
-                                        <option value="cs.DS">Data Structures & Algorithms</option>
-                                        <option value="cs.HC">Human-Computer Interaction</option>
-                                    </optgroup>
-                                    <optgroup label="Physics">
-                                        <option value="physics.bio-ph">Biological Physics</option>
-                                        <option value="physics.chem-ph">Chemical Physics</option>
-                                        <option value="physics.comp-ph">Computational Physics</option>
-                                        <option value="astro-ph">Astrophysics</option>
-                                        <option value="cond-mat.stat-mech">Statistical Mechanics</option>
-                                        <option value="cond-mat.soft">Soft Condensed Matter</option>
-                                        <option value="cond-mat.mtrl-sci">Materials Science</option>
-                                        <option value="quant-ph">Quantum Physics</option>
-                                    </optgroup>
-                                    <optgroup label="Biology">
-                                        <option value="q-bio.NC">Neuroscience</option>
-                                        <option value="q-bio.CB">Cell Biology</option>
-                                        <option value="q-bio.MN">Molecular Networks</option>
-                                        <option value="q-bio.BM">Biomolecules</option>
-                                        <option value="q-bio.PE">Populations & Evolution</option>
-                                        <option value="q-bio.QM">Quantitative Methods</option>
-                                    </optgroup>
-                                    <optgroup label="Mathematics">
-                                        <option value="math.DS">Dynamical Systems</option>
-                                        <option value="math.OC">Optimization & Control</option>
-                                        <option value="math.PR">Probability</option>
-                                        <option value="math.ST">Statistics</option>
-                                        <option value="math.NA">Numerical Analysis</option>
-                                    </optgroup>
-                                    <optgroup label="Other">
-                                        <option value="nlin.AO">Nonlinear Dynamics</option>
-                                        <option value="stat.ML">Statistics - ML</option>
-                                        <option value="econ.TH">Economics - Theory</option>
-                                        <option value="eess.SP">Signal Processing</option>
-                                    </optgroup>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Topic/Concept</label>
-                                <input type="text" class="domain-query input" data-domain="2" placeholder="e.g., neural signaling">
-                            </div>
+                    <div class="form-group">
+                        <label for="analysis-title">Analysis title</label>
+                        <input type="text" id="analysis-title" class="input" placeholder="e.g. Predictive coding draft v3">
+                    </div>
+
+                    <div class="split-fields">
+                        <div class="form-group">
+                            <label for="field-select">Primary field</label>
+                            <select id="field-select" class="select">
+                                <option value="physics">Physics</option>
+                                <option value="biology">Biology</option>
+                                <option value="computer-science">Computer Science / ML</option>
+                                <option value="neuroscience">Neuroscience</option>
+                                <option value="chemistry">Chemistry</option>
+                                <option value="generic">Generic structural view</option>
+                            </select>
                         </div>
-
-                        <!-- Domain 3 (Optional) -->
-                        <div class="domain-search-box">
-                            <h3>Domain 3 <span class="optional">(Optional)</span></h3>
-                            <div class="form-group">
-                                <label>Research Area</label>
-                                <select class="domain-category select" data-domain="3">
-                                    <option value="">-- None --</option>
-                                    <optgroup label="Computer Science">
-                                        <option value="cs.AI">AI & Machine Learning</option>
-                                        <option value="cs.LG">Machine Learning</option>
-                                        <option value="cs.CV">Computer Vision</option>
-                                        <option value="cs.CL">Natural Language Processing</option>
-                                        <option value="cs.RO">Robotics</option>
-                                        <option value="cs.NE">Neural Networks</option>
-                                        <option value="cs.CR">Cryptography & Security</option>
-                                        <option value="cs.DS">Data Structures & Algorithms</option>
-                                        <option value="cs.HC">Human-Computer Interaction</option>
-                                    </optgroup>
-                                    <optgroup label="Physics">
-                                        <option value="physics.bio-ph">Biological Physics</option>
-                                        <option value="physics.chem-ph">Chemical Physics</option>
-                                        <option value="physics.comp-ph">Computational Physics</option>
-                                        <option value="astro-ph">Astrophysics</option>
-                                        <option value="cond-mat.stat-mech">Statistical Mechanics</option>
-                                        <option value="cond-mat.soft">Soft Condensed Matter</option>
-                                        <option value="cond-mat.mtrl-sci">Materials Science</option>
-                                        <option value="quant-ph">Quantum Physics</option>
-                                    </optgroup>
-                                    <optgroup label="Biology">
-                                        <option value="q-bio.NC">Neuroscience</option>
-                                        <option value="q-bio.CB">Cell Biology</option>
-                                        <option value="q-bio.MN">Molecular Networks</option>
-                                        <option value="q-bio.BM">Biomolecules</option>
-                                        <option value="q-bio.PE">Populations & Evolution</option>
-                                        <option value="q-bio.QM">Quantitative Methods</option>
-                                    </optgroup>
-                                    <optgroup label="Mathematics">
-                                        <option value="math.DS">Dynamical Systems</option>
-                                        <option value="math.OC">Optimization & Control</option>
-                                        <option value="math.PR">Probability</option>
-                                        <option value="math.ST">Statistics</option>
-                                        <option value="math.NA">Numerical Analysis</option>
-                                    </optgroup>
-                                    <optgroup label="Other">
-                                        <option value="nlin.AO">Nonlinear Dynamics</option>
-                                        <option value="stat.ML">Statistics - ML</option>
-                                        <option value="econ.TH">Economics - Theory</option>
-                                        <option value="eess.SP">Signal Processing</option>
-                                    </optgroup>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Topic/Concept</label>
-                                <input type="text" class="domain-query input" data-domain="3" placeholder="e.g., phase transitions">
-                            </div>
+                        <div class="form-group">
+                            <label for="analysis-depth">Search depth</label>
+                            <select id="analysis-depth" class="select">
+                                <option value="focused">Focused</option>
+                                <option value="standard" selected>Standard</option>
+                                <option value="broad">Broad</option>
+                            </select>
                         </div>
                     </div>
 
-                    <div class="form-group" style="margin-top: 20px;">
-                        <label>Papers per Domain: <span id="papers-count">8</span></label>
-                        <input type="range" id="papers-per-domain" class="slider" value="8" min="5" max="15" style="width: 100%; max-width: 300px;">
+                    <div class="form-group">
+                        <label for="manuscript-file">Upload manuscript or notes</label>
+                        <input type="file" id="manuscript-file" class="input file-input" accept=".pdf,.md,.txt,.markdown,.json">
+                        <p class="hint-small">PDF, Markdown, and text are supported. You can also paste raw text below.</p>
                     </div>
 
-                    <button id="discover-btn" class="btn btn-primary btn-large">🚀 Discover Connections</button>
-                </div>
-            </section>
+                    <div class="form-group">
+                        <label for="manuscript-text">Or paste manuscript text</label>
+                        <textarea id="manuscript-text" class="textarea" placeholder="Paste manuscript sections, notes, or an extended outline here."></textarea>
+                    </div>
 
-            <!-- Results Section -->
-            <section id="results-section" class="section" style="display: none;">
-                <div class="card">
-                    <h2>📚 Papers by Domain</h2>
-                    <div id="papers-by-domain" class="papers-by-domain"></div>
-                </div>
-            </section>
+                    <div class="form-group">
+                        <label for="analysis-note">Optional instruction</label>
+                        <textarea id="analysis-note" class="textarea short-textarea" placeholder="Optional: bias the search toward a candidate domain, formalism, or question."></textarea>
+                    </div>
 
-            <!-- Discovery Section -->
-            <section id="discovery-section" class="section" style="display: none;">
-                <div class="card">
-                    <h2>💡 Analogical Connections</h2>
-                    <p class="hint">AI-discovered cross-domain patterns and analogies</p>
-                    <div id="connections-container" class="connections-container"></div>
+                    <div class="action-row">
+                        <button id="analyze-btn" class="btn btn-primary">Run Analysis</button>
+                        <button id="save-session-btn" class="btn btn-secondary">Save Session</button>
+                    </div>
                 </div>
-            </section>
 
-            <!-- Hypotheses Section -->
-            <section id="hypotheses-section" class="section" style="display: none;">
-                <div class="card">
-                    <h2>🔮 Research Hypotheses</h2>
-                    <p class="hint">Novel research directions suggested by cross-domain insights</p>
-                    <div id="hypotheses-container" class="hypotheses-container"></div>
+                <div class="panel-block">
+                    <p class="section-label">Pipeline</p>
+                    <div id="pipeline-status" class="pipeline-list"></div>
                 </div>
-            </section>
 
-            <!-- Patterns Section -->
-            <section id="patterns-section" class="section" style="display: none;">
-                <div class="card">
-                    <h2>🧩 Universal Patterns</h2>
-                    <p class="hint">Fundamental principles that transcend specific domains</p>
-                    <div id="patterns-container" class="patterns-container"></div>
-                </div>
-            </section>
-
-            <!-- Action Buttons -->
-            <section id="action-section" class="section" style="display: none;">
-                <div class="card">
-                    <div class="stats-bar">
-                        <div class="stat-item">
-                            <span class="stat-number" id="connections-count">0</span>
-                            <span class="stat-label">Analogies Found</span>
+                <div class="panel-block">
+                    <div class="panel-header-row">
+                        <div>
+                            <p class="section-label">Session Meta</p>
+                            <h3>Current run</h3>
                         </div>
-                        <div class="stat-item">
-                            <span class="stat-number" id="hypotheses-count">0</span>
-                            <span class="stat-label">Hypotheses Generated</span>
+                        <button id="view-notebooks-btn" class="btn btn-secondary">Open Library</button>
+                    </div>
+                    <div id="analysis-summary" class="summary-stack empty-state-inline">No analysis loaded yet.</div>
+                </div>
+            </section>
+
+            <section class="results-column section-panel">
+                <div class="panel-block hero-results">
+                    <div class="panel-header-row wide-gap">
+                        <div>
+                            <p class="section-label">Structural Fingerprint</p>
+                            <h2 id="fingerprint-title">Awaiting manuscript</h2>
                         </div>
-                        <div class="stat-item">
-                            <span class="stat-number" id="patterns-count">0</span>
-                            <span class="stat-label">Patterns Extracted</span>
+                        <div class="hero-tags">
+                            <span id="verification-summary-pill" class="tag muted-tag">No verification yet</span>
+                            <span id="field-pill" class="tag">Generic</span>
                         </div>
                     </div>
-                    <div class="action-buttons">
-                        <button id="find-analogies-btn" class="btn btn-primary">🔗 Find Deep Analogies</button>
-                        <button id="generate-hypotheses-btn" class="btn btn-secondary">💭 Generate Hypotheses</button>
-                        <button id="extract-patterns-btn" class="btn btn-secondary">🧩 Extract Patterns</button>
-                        <button id="new-notebook-btn" class="btn btn-secondary">📝 New Notebook</button>
+                    <div id="fingerprint-summary" class="fingerprint-summary empty-state-inline">Run an analysis to extract the document's organizing entities, dynamics, and constraints.</div>
+                    <div id="fingerprint-grid" class="fingerprint-grid"></div>
+                </div>
+
+                <div class="parallel-layout">
+                    <div class="panel-block graph-block">
+                        <div class="panel-header-row">
+                            <div>
+                                <p class="section-label">Correspondence View</p>
+                                <h2>Parallel typed graphs</h2>
+                            </div>
+                            <button id="rerender-btn" class="btn btn-secondary">Refresh Rendering</button>
+                        </div>
+                        <div id="graph-shell" class="graph-shell empty-state-inline">Proposed correspondences will render here once the analysis completes.</div>
                     </div>
-                    <p class="hint-small" style="text-align: center; margin-top: 12px;">
-                        Click "Find More Analogies" multiple times to discover different perspectives and connections
-                    </p>
+
+                    <div class="panel-block detail-block">
+                        <p class="section-label">Drill Down</p>
+                        <h2 id="detail-title">Select a ribbon</h2>
+                        <div id="detail-panel" class="detail-panel empty-state-inline">Choose a correspondence to inspect the reasoning, evidence, and field-native rendering.</div>
+                    </div>
+                </div>
+
+                <div class="panel-block">
+                    <div class="panel-header-row">
+                        <div>
+                            <p class="section-label">Candidate Domains</p>
+                            <h2>Analog domain roster</h2>
+                        </div>
+                    </div>
+                    <div id="candidate-domains" class="candidate-grid empty-state-inline">No candidate domains surfaced yet.</div>
                 </div>
             </section>
-        </div>
+        </main>
 
-        <!-- Loading Overlay -->
         <div id="loading-overlay" class="loading-overlay" style="display: none;">
-            <div class="spinner"></div>
-            <p id="loading-text">Loading...</p>
+            <div class="loader-panel">
+                <div class="spinner"></div>
+                <p id="loading-text">Running analysis...</p>
+            </div>
         </div>
 
-        <!-- Toast Notifications -->
         <div id="toast-container" class="toast-container"></div>
 
-        <!-- Upgrade Modal -->
         <div id="upgrade-modal" class="modal" style="display: none;">
             <div class="modal-content">
-                <h3>🚀 Upgrade to Premium</h3>
-                <p id="upgrade-message">Unlock unlimited discoveries!</p>
-                <div class="pricing-card" style="margin: 20px 0;">
-                    <div class="price">$9.99<span class="period">/month</span></div>
-                    <ul class="features-list">
-                        <li>✓ 100 notebooks per month</li>
-                        <li>✓ Unlimited analogies, hypotheses & patterns per notebook</li>
-                        <li>✓ AI-powered cross-domain discovery</li>
-                        <li>✓ Save and access all your research</li>
-                    </ul>
-                </div>
+                <p class="section-label">Upgrade</p>
+                <h3>Premium required for more saved runs</h3>
+                <p id="upgrade-message">Upgrade to continue.</p>
                 <div class="modal-buttons">
                     <button id="upgrade-now-btn" class="btn btn-primary">Upgrade Now</button>
-                    <button id="close-upgrade-modal" class="btn btn-secondary">Maybe Later</button>
+                    <button id="close-upgrade-modal" class="btn btn-secondary">Close</button>
                 </div>
             </div>
         </div>
 
-        <!-- Forgot Password Modal -->
         <div id="forgot-password-modal" class="modal" style="display: none;">
             <div class="modal-content">
-                <h3>Reset Password</h3>
-                <p>Enter your email address and we'll send you a password reset link.</p>
+                <p class="section-label">Reset</p>
+                <h3>Reset password</h3>
+                <p>Enter your email and LatentLink will send a reset link.</p>
                 <div class="form-group">
                     <input type="email" id="reset-email" class="input" placeholder="your@email.com">
                 </div>
@@ -416,44 +295,24 @@
                 </div>
             </div>
         </div>
-
-        <!-- Chord Diagram Modal -->
-        <div id="chord-modal" class="modal" style="display: none;">
-            <div class="modal-content chord-modal-content">
-                <div class="modal-header">
-                    <h3>📊 Connection Strength Visualization</h3>
-                    <button class="modal-close" onclick="closeChordModal()">&times;</button>
-                </div>
-                <div id="chord-diagram-container">
-                    <svg id="chord-diagram"></svg>
-                </div>
-                <div class="chord-info">
-                    <div id="domain-legend" class="domain-legend"></div>
-                    <div class="chord-description">
-                        <p>Chord thickness represents connection strength between papers. Hover over arcs to see full paper titles.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
     </div>
 
-    <!-- Load scripts in order -->
     <script src="scripts/dots.js"></script>
     <script src="scripts/back4app-config.js"></script>
     <script src="scripts/auth.js"></script>
     <script src="scripts/subscription.js"></script>
     <script src="scripts/notebooks.js"></script>
     <script src="scripts/app.js"></script>
-    
-    <!-- Initialize dots animation -->
+
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             draw_dots('dots-canvas', {
                 speed: 60,
-                dot_color: 'rgba(37, 99, 235, 0.8)',
-                line_color: 'rgba(37, 99, 235, 0.4)',
-                line_width: 1.5
+                dot_color: 'rgba(212, 245, 122, 0.75)',
+                line_color: 'rgba(122, 245, 200, 0.18)',
+                line_width: 1.2
             });
+
         });
     </script>
 </body>
