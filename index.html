@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; font-src 'self' https://fonts.gstatic.com https://m.stripe.network data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self' 'unsafe-inline' https://js.stripe.com https://unpkg.com; connect-src 'self' https://parseapi.back4app.com https://api.openai.com https://export.arxiv.org https://api.openalex.org https://api.semanticscholar.org https://m.stripe.network https://api.stripe.com https://unpkg.com; frame-src 'self' https://js.stripe.com https://hooks.stripe.com; worker-src 'self' blob: https://unpkg.com; img-src 'self' data:">
-    <title>LatentLink v2</title>
+    <title>LatentLink</title>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 fill=%22%230c0c0c%22/><text x=%2250%22 y=%2266%22 text-anchor=%22middle%22 font-size=%2254%22 fill=%22%23d4f57a%22>LL</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -26,15 +26,15 @@
     <div class="app-shell">
         <header class="site-header">
             <div>
-                <p class="section-label">LatentLink v2</p>
-                <h1 class="hero-title">Surface the structural correspondences already implicit in your manuscript.</h1>
+                <p class="section-label">LatentLink</p>
+                <h1 class="hero-title">Reveal Cross-Disciplinary Insights</h1>
             </div>
             <div class="hero-copy">
-                <p class="hero-text">Upload a draft, notes, or outline. LatentLink extracts the structural fingerprint, proposes analog domains, verifies each correspondence against the literature, and renders the result in your own formal language.</p>
+                <p class="hero-text">Upload a draft, notes, or outline. LatentLink finds the deep analogies between your work and other scientific fields, verifies them against published literature, and shows you the result in the language you actually work in.</p>
                 <div class="hero-tags">
                     <span class="tag">Manuscript-first</span>
                     <span class="tag">Verification-aware</span>
-                    <span class="tag">Field-native rendering</span>
+                    <span class="tag">In your discipline's language</span>
                 </div>
             </div>
         </header>
@@ -104,6 +104,43 @@
                             <p class="auth-switch">Already have an account? <a href="#" id="show-login">Sign in</a></p>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <div class="panel-block purpose-block">
+                <p class="section-label">What LatentLink Is For</p>
+                <div class="purpose-grid">
+                    <article class="purpose-card">
+                        <span class="purpose-kicker">01 / TRANSFER</span>
+                        <h3>Methods that transfer</h3>
+                        <p class="purpose-quote">"What methods from other fields could move this forward?"</p>
+                        <p>Whole branches of mathematics develop independently in fields that don't talk to each other. LatentLink shows you the methods, formalisms, and recent results in fields that structurally parallel yours - translated into your discipline's language so you can see what could carry over and where it would need to be adapted.</p>
+                        <p class="purpose-example"><span>Example:</span> a cosmologist studying unified wave-function descriptions might discover that quantum chemists have spent decades refining DFT for the same kind of problem.</p>
+                    </article>
+
+                    <article class="purpose-card">
+                        <span class="purpose-kicker">02 / FORMALIZE</span>
+                        <h3>The right formalism for what you already understand</h3>
+                        <p class="purpose-quote">"What's the right way to formalize this?"</p>
+                        <p>Sometimes the bottleneck isn't understanding - it's not having the right mathematical language to express what you already understand. LatentLink shows you how other fields formalize structurally similar problems, so you can see which formalisms might fit yours.</p>
+                        <p class="purpose-example"><span>Example:</span> a biologist working on regulatory networks might find that control theory has exactly the right machinery - transfer functions, stability analysis - for the questions they're asking qualitatively.</p>
+                    </article>
+
+                    <article class="purpose-card">
+                        <span class="purpose-kicker">03 / DIVERGE</span>
+                        <h3>Where the parallel breaks</h3>
+                        <p class="purpose-quote">"Where would the parallel break?"</p>
+                        <p>Methods carry assumptions from the field they were developed in. A method that fits one domain can fail in another when those assumptions don't hold. LatentLink shows you where the parallel between fields holds and where it diverges - so you understand the structure deeply enough to know what adapts and what doesn't.</p>
+                        <p class="purpose-example"><span>Example:</span> control theory's stability analysis fits some immune-system dynamics but breaks where biological feedback isn't bounded the way engineered systems are.</p>
+                    </article>
+
+                    <article class="purpose-card">
+                        <span class="purpose-kicker">04 / FRONTIER</span>
+                        <h3>The current frontier on your kind of problem</h3>
+                        <p class="purpose-quote">"What's the current frontier on this kind of problem?"</p>
+                        <p>The most recent and rigorous work on your kind of problem may be happening in a field you don't follow. LatentLink shows you what's been published recently in fields that structurally parallel yours - including specific methods and results from the last few years you'd want to know about.</p>
+                        <p class="purpose-example"><span>Example:</span> someone working on optimization landscape geometry in deep learning might find that statistical-mechanics groups have produced the strongest recent results on this exact structure, in venues an ML researcher wouldn't normally read.</p>
+                    </article>
                 </div>
             </div>
         </div>
@@ -219,6 +256,7 @@
                         <div>
                             <p class="section-label">Structural Fingerprint</p>
                             <h2 id="fingerprint-title">Awaiting manuscript</h2>
+                            <p class="section-subtitle">What your manuscript is structurally doing.</p>
                         </div>
                         <div class="hero-tags">
                             <span id="verification-summary-pill" class="tag muted-tag">No verification yet</span>
@@ -234,9 +272,9 @@
                         <div class="panel-header-row">
                             <div>
                                 <p class="section-label">Correspondence View</p>
-                                <h2>Structural chord diagram</h2>
+                                <h2>Connection Graph</h2>
+                                <p class="section-subtitle">How your work maps onto the analog domain you've selected.</p>
                             </div>
-                            <div id="graph-domain-selector" class="graph-domain-selector"></div>
                         </div>
                         <div id="graph-shell" class="graph-shell empty-state-inline">Proposed correspondences will render here once the analysis completes.</div>
                     </div>
@@ -244,7 +282,8 @@
                     <div class="panel-block detail-block">
                         <p class="section-label">Drill Down</p>
                         <h2 id="detail-title">Select a ribbon</h2>
-                        <div id="detail-panel" class="detail-panel empty-state-inline">Choose a correspondence to inspect the reasoning, evidence, and field-native rendering.</div>
+                        <p class="section-subtitle">Detailed view of one correspondence - its reasoning, sources, and rendering.</p>
+                        <div id="detail-panel" class="detail-panel empty-state-inline">Choose a correspondence to inspect the reasoning, evidence, and translated rendering.</div>
                     </div>
                 </div>
 
@@ -252,7 +291,8 @@
                     <div class="panel-header-row">
                         <div>
                             <p class="section-label">Candidate Domains</p>
-                            <h2>Analog domain roster</h2>
+                            <h2>Candidate domains</h2>
+                            <p class="section-subtitle">Other scientific areas where the same structure appears.</p>
                         </div>
                     </div>
                     <div id="candidate-domains" class="candidate-grid empty-state-inline">No candidate domains surfaced yet.</div>

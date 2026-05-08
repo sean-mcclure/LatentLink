@@ -180,6 +180,13 @@ h3 {
     gap: 24px;
 }
 
+.purpose-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+    margin-top: 18px;
+}
+
 .workspace-grid {
     grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
     align-items: start;
@@ -362,7 +369,8 @@ label {
 .notebook-card,
 .detail-section,
 .evidence-card,
-.mapping-row {
+.mapping-row,
+.purpose-card {
     border: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.02);
     padding: 14px;
@@ -372,7 +380,8 @@ label {
 .candidate-card h3,
 .detail-section h3,
 .notebook-card h3,
-.mapping-row h4 {
+.mapping-row h4,
+.purpose-card h3 {
     display: block;
     margin-bottom: 8px;
     font-family: 'DM Serif Display', serif;
@@ -386,8 +395,42 @@ label {
 .mapping-row p,
 .fingerprint-card p,
 .evidence-card p,
-.notebook-card p {
+.notebook-card p,
+.purpose-card p {
     color: var(--text-muted);
+}
+
+.purpose-kicker {
+    display: inline-flex;
+    margin-bottom: 10px;
+    font-family: 'DM Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--accent);
+    font-size: 0.68rem;
+}
+
+.purpose-quote {
+    color: var(--text-primary);
+    font-size: 1.02rem;
+    margin-bottom: 10px;
+}
+
+.purpose-example {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.purpose-example span {
+    color: var(--accent-2);
+}
+
+.section-subtitle,
+.detail-subtitle {
+    color: var(--text-muted);
+    margin-top: 8px;
+    max-width: 48ch;
 }
 
 .fingerprint-grid {
@@ -427,30 +470,6 @@ label {
     min-height: 520px;
     overflow: hidden;
     position: relative;
-}
-
-.graph-domain-selector {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-.graph-domain-pill {
-    border: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.02);
-    color: var(--text-muted);
-    padding: 8px 10px;
-    cursor: pointer;
-    font-family: 'DM Mono', monospace;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    font-size: 0.66rem;
-}
-
-.graph-domain-pill.active {
-    border-color: var(--border-strong);
-    color: var(--accent);
-    box-shadow: var(--shadow-glow);
 }
 
 .candidate-card.active,
@@ -496,6 +515,12 @@ label {
     opacity: 0.12;
 }
 
+.diagram-chord.dimmed-domain,
+.entity-node.dimmed-domain,
+.domain-cluster-label:not(.active) {
+    opacity: 0.22;
+}
+
 .stub-path,
 .empty-chord-outline {
     stroke: rgba(240, 237, 232, 0.22);
@@ -526,6 +551,18 @@ label {
 .entity-label {
     fill: var(--text-primary);
     font-size: 13px;
+}
+
+.domain-cluster-label {
+    fill: var(--text-muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.domain-cluster-label.active {
+    fill: var(--accent);
 }
 
 .entity-node.unlinked .entity-label {
@@ -773,6 +810,10 @@ label {
     .parallel-layout,
     .auth-grid,
     .site-header {
+        grid-template-columns: 1fr;
+    }
+
+    .purpose-grid {
         grid-template-columns: 1fr;
     }
 

@@ -32,7 +32,7 @@ A real cross-domain analogy is structural. Two systems are analogous when their 
 
 The framework's central empirical claim — and the reason this architecture works — is that LLMs trained on scientific corpora learn this structural organization implicitly during training. Surface vocabulary is incidental; the structural roles concepts play in their predictive context are what gets encoded in the weights. This means the model already knows, in some implicit form, that energy minimization plays the same role in spin glasses as in Hopfield networks. We don't need to reconstruct that knowledge externally with our own clustering pipeline. We need to surface it, verify it, and render it usefully.
 
-The architectural shift from the original v2 spec: **the LLM is the engine, not a black-box claim-extractor with reconstruction work happening around it.** External infrastructure exists only to scaffold what the LLM already knows (the framework system prompt) and to verify what it produces (the literature grounding step). Everything else gets out of the way.
+So: **the LLM is the engine, not a black-box claim-extractor with reconstruction work happening around it.** External infrastructure exists only to scaffold what the LLM already knows (the framework system prompt) and to verify what it produces (the literature grounding step). Everything else gets out of the way.
 
 ---
 
@@ -44,7 +44,7 @@ The architectural shift from the original v2 spec: **the LLM is the engine, not 
 
 **Output:** Cleaned text plus extracted metadata — title, abstract or summary if available, declared field of expertise (from user profile or inferred from the document), and a working representation of what the user is studying or claiming.
 
-**Implementation:** Use existing PDF extraction (the LatentLink frontend already supports PDF upload), Markdown for notes, plus light LLM preprocessing to normalize formatting, identify section structure, and pull out the key claims being made. This preprocessing is one Opus call total per upload — doesn't scale with document size in any expensive way.
+**Implementation:** Use PDF extraction. Markdown for notes, plus light LLM preprocessing to normalize formatting, identify section structure, and pull out the key claims being made. This preprocessing is one Opus call total per upload — doesn't scale with document size in any expensive way.
 
 ### 3.2 The framework system prompt
 

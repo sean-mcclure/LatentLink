@@ -3,7 +3,7 @@ const PIPELINE_STEPS = [
     { key: 'fingerprint', title: 'Structural fingerprint', description: 'Extract the organizing entities, dynamics, and constraints.' },
     { key: 'correspondences', title: 'Analog domain surfacing', description: 'Propose analog domains and explicit role mappings.' },
     { key: 'verification', title: 'Verification search', description: 'Check each mapping against literature and flag confidence.' },
-    { key: 'render', title: 'Field-native rendering', description: 'Render each verified mapping in the user\'s own formal vernacular.' }
+    { key: 'render', title: 'In your discipline\'s language', description: 'Render each mapping in the user\'s own working vernacular.' }
 ];
 
 const state = {
@@ -11,6 +11,7 @@ const state = {
     selectedCorrespondenceId: null,
     selectedDomainKey: null,
     graphPopover: null,
+    highlightedDomainKey: null,
     analysis: null,
     pipelineStatus: PIPELINE_STEPS.map((step) => ({ ...step, status: 'idle', detail: step.description })),
     notebookList: []
@@ -411,7 +412,7 @@ async function rerenderCorrespondences() {
     }
 
     const field = document.getElementById('field-select').value;
-    showLoading('Refreshing field-native renderings...');
+    showLoading('Refreshing discipline-specific renderings...');
 
     try {
         const manuscriptPayload = createManuscriptPayload(state.analysis.manuscript);
@@ -467,6 +468,7 @@ function resetWorkspace() {
     state.selectedCorrespondenceId = null;
     state.selectedDomainKey = null;
     state.graphPopover = null;
+    state.highlightedDomainKey = null;
     notebookManager.startNewNotebook({});
     resetPipelineStatus();
     document.getElementById('analysis-title').value = '';
@@ -559,7 +561,7 @@ function renderFingerprint() {
         { title: 'Entities', items: fingerprint.entities },
         { title: 'Dynamics', items: fingerprint.dynamics },
         { title: 'Constraints', items: fingerprint.constraints },
-        { title: 'Caveats', items: fingerprint.sensitiveZones }
+        { title: 'Possible gaps', items: fingerprint.sensitiveZones }
     ];
 
     gridEl.innerHTML = cards.map((card) => `
@@ -581,9 +583,8 @@ function renderCandidates() {
     }
 
     container.classList.remove('empty-state-inline');
-    const selectedDomainKey = getSelectedDomainKey();
     container.innerHTML = state.analysis.candidates.map((candidate) => `
-        <article class="candidate-card ${getDomainKey(candidate) === selectedDomainKey ? 'active' : ''}" data-domain-key="${escapeHtml(getDomainKey(candidate))}">
+        <article class="candidate-card ${getDomainKey(candidate) === state.highlightedDomainKey ? 'active' : ''}" data-domain-key="${escapeHtml(getDomainKey(candidate))}">
             <span class="pill">${escapeHtml(candidate.domain)}</span>
             <h3>${escapeHtml(candidate.label)}</h3>
             <p>${escapeHtml(candidate.rationale)}</p>
@@ -595,9 +596,13 @@ function renderCandidates() {
 
     container.querySelectorAll('.candidate-card').forEach((card) => {
         card.addEventListener('click', () => {
-            state.selectedDomainKey = card.getAttribute('data-domain-key');
+            const domainKey = card.getAttribute('data-domain-key');
+            const nextDomain = state.highlightedDomainKey === domainKey ? null : domainKey;
+            state.highlightedDomainKey = nextDomain;
             state.graphPopover = null;
-            state.selectedCorrespondenceId = getCorrespondencesForSelectedDomain()[0]?.id || state.selectedCorrespondenceId;
+            if (nextDomain) {
+                state.selectedCorrespondenceId = getCorrespondencesForDomain(nextDomain)[0]?.id || state.selectedCorrespondenceId;
+            }
             renderCandidates();
             renderGraph();
             renderDetailPanel();
@@ -607,57 +612,39 @@ function renderCandidates() {
 
 function renderGraph() {
     const container = document.getElementById('graph-shell');
-    const selector = document.getElementById('graph-domain-selector');
     if (!state.analysis?.correspondences?.length) {
         container.classList.add('empty-state-inline');
         container.textContent = 'Proposed correspondences will render here once the analysis completes.';
-        selector.innerHTML = '';
         return;
     }
 
     syncSelectionState();
 
     container.classList.remove('empty-state-inline');
+    const correspondences = state.analysis.correspondences || [];
     const domains = getAvailableAnalogDomains();
-    selector.innerHTML = domains.map((domain) => `
-        <button class="graph-domain-pill ${domain.key === state.selectedDomainKey ? 'active' : ''}" data-domain-key="${escapeHtml(domain.key)}">${escapeHtml(domain.label)}</button>
-    `).join('');
-
-    selector.querySelectorAll('.graph-domain-pill').forEach((button) => {
-        button.addEventListener('click', () => {
-            state.selectedDomainKey = button.getAttribute('data-domain-key');
-            state.graphPopover = null;
-            state.selectedCorrespondenceId = getCorrespondencesForSelectedDomain()[0]?.id || state.selectedCorrespondenceId;
-            renderCandidates();
-            renderGraph();
-            renderDetailPanel();
-        });
-    });
-
-    const selectedDomain = domains.find((domain) => domain.key === state.selectedDomainKey) || domains[0];
-    const correspondences = getCorrespondencesForSelectedDomain();
     const sourceNodes = buildSourceNodes(correspondences);
-    const targetNodes = buildTargetNodes(correspondences, selectedDomain);
-    const width = 860;
-    const height = Math.max(520, Math.max(sourceNodes.length, targetNodes.length, 4) * 76 + 120);
+    const targetNodes = buildTargetNodes(correspondences, domains);
+    const width = 980;
+    const height = Math.max(620, Math.max(sourceNodes.length, targetNodes.length, 6) * 72 + 140);
     const leftX = 130;
-    const rightX = width - 130;
+    const rightX = width - 160;
     const leftStubX = width / 2 - 110;
     const rightStubX = width / 2 + 110;
 
-    const sourceLayout = layoutNodes(sourceNodes, leftX, height, 'source');
-    const targetLayout = layoutNodes(targetNodes, rightX, height, 'target');
+    const sourceLayout = layoutNodes(sourceNodes, leftX, height, 'source', correspondences);
+    const targetLayout = layoutTargetNodes(targetNodes, domains, rightX, height, correspondences);
     const linkedSourceNames = new Set(correspondences.map((item) => item.sourceRole.name));
-    const linkedTargetNames = new Set(correspondences.map((item) => item.targetRole.name));
-    const noChords = correspondences.length === 0;
+    const linkedTargetNames = new Set(correspondences.map((item) => `${getDomainKey(item)}::${item.targetRole.name}`));
 
     container.innerHTML = `
         <div class="chord-shell">
             <svg class="chord-diagram" viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMin meet">
                 <text x="42" y="34" class="graph-label" fill="#d4f57a">User domain</text>
-                <text x="${width - 210}" y="34" class="graph-label" fill="#7af5c8">${escapeHtml(selectedDomain?.label || 'Analog domain')}</text>
+                <text x="${width - 300}" y="34" class="graph-label" fill="#7af5c8">Candidate analog domains</text>
+                ${renderDomainLabels(domains, targetLayout, width)}
                 ${renderNodeGuides(sourceLayout, targetLayout, leftStubX, rightStubX, linkedSourceNames, linkedTargetNames)}
-                ${noChords ? renderEmptyChordState(width, height) : renderChords(correspondences, sourceLayout, targetLayout)}
+                ${renderChords(correspondences, sourceLayout, targetLayout, state.highlightedDomainKey)}
                 ${renderNodeMarks(sourceLayout, linkedSourceNames, 'source')}
                 ${renderNodeMarks(targetLayout, linkedTargetNames, 'target')}
             </svg>
@@ -676,7 +663,7 @@ function renderDetailPanel() {
     if (!selected) {
         detailTitle.textContent = 'Select a ribbon';
         container.classList.add('empty-state-inline');
-        container.textContent = 'Choose a correspondence to inspect the reasoning, evidence, and field-native rendering.';
+        container.textContent = 'Choose a correspondence to inspect the reasoning, evidence, and translated rendering.';
         return;
     }
 
@@ -696,6 +683,7 @@ function renderDetailPanel() {
 
             <section class="detail-section">
                 <span class="detail-label">Structural reasoning</span>
+                <p class="detail-subtitle">Why the system thinks these two structures correspond.</p>
                 <p>${escapeHtml(selected.reasoning)}</p>
                 <div class="mapping-row active">
                     <h4>${escapeHtml(selected.sourceRole.name)} → ${escapeHtml(selected.targetRole.name)}</h4>
@@ -705,6 +693,7 @@ function renderDetailPanel() {
 
             <section class="detail-section">
                 <span class="detail-label">Verification evidence</span>
+                <p class="detail-subtitle">Published work that supports or challenges this correspondence.</p>
                 <div class="evidence-list">
                     ${(selected.verification.evidence || []).map((evidence) => `
                         <article class="evidence-card">
@@ -718,7 +707,8 @@ function renderDetailPanel() {
             </section>
 
             <section class="detail-section">
-                <span class="rendering-label">${escapeHtml(labelForField(state.analysis.field))} rendering</span>
+                <span class="rendering-label">${escapeHtml(translatedForFieldLabel(state.analysis.field))}</span>
+                <p class="detail-subtitle">This correspondence written out in the language of your field.</p>
                 <p>${escapeHtml(selected.rendering.summary)}</p>
                 <div class="rendering-code">${escapeHtml(selected.rendering.artifact)}</div>
                 <ul class="rendering-list">
@@ -849,7 +839,9 @@ function markRunningStepAsError(message) {
 }
 
 function getSelectedCorrespondence() {
-    const scopedCorrespondences = getCorrespondencesForSelectedDomain();
+    const scopedCorrespondences = state.highlightedDomainKey
+        ? getCorrespondencesForDomain(state.highlightedDomainKey)
+        : (state.analysis?.correspondences || []);
     if (!scopedCorrespondences.length) {
         return null;
     }
@@ -896,9 +888,13 @@ function getSelectedDomainKey() {
     return getAvailableAnalogDomains()[0]?.key || null;
 }
 
+function getCorrespondencesForDomain(domainKey) {
+    return (state.analysis?.correspondences || []).filter((item) => getDomainKey(item) === domainKey);
+}
+
 function getCorrespondencesForSelectedDomain() {
     const selectedDomainKey = getSelectedDomainKey();
-    return (state.analysis?.correspondences || []).filter((item) => getDomainKey(item) === selectedDomainKey);
+    return getCorrespondencesForDomain(selectedDomainKey);
 }
 
 function syncSelectionState() {
@@ -935,25 +931,35 @@ function buildSourceNodes(correspondences) {
     return [...sourceMap.values()];
 }
 
-function buildTargetNodes(correspondences, selectedDomain) {
-    const candidate = (state.analysis?.candidates || []).find((item) => getDomainKey(item) === selectedDomain?.key);
-    const anchorTerms = (candidate?.anchorTerms || []).map((term) => ({
-        name: term,
-        roleType: 'analog term'
+function buildTargetNodes(correspondences, selectedDomains) {
+    const domains = Array.isArray(selectedDomains) ? selectedDomains : [selectedDomains];
+    const anchorTerms = domains.flatMap((domain) => {
+        const candidate = (state.analysis?.candidates || []).find((item) => getDomainKey(item) === domain?.key);
+        return (candidate?.anchorTerms || []).map((term) => ({
+            name: term,
+            roleType: 'analog term',
+            domainKey: domain?.key,
+            domainLabel: domain?.label || candidate?.label || candidate?.domain || 'Analog domain'
+        }));
+    });
+    const targetNodes = correspondences.map((item) => ({
+        ...item.targetRole,
+        domainKey: getDomainKey(item),
+        domainLabel: item.analogDomain || domains.find((domain) => domain.key === getDomainKey(item))?.label || 'Analog domain'
     }));
-    const targetNodes = collectNodes(correspondences, 'target');
     const targetMap = new Map();
     [...targetNodes, ...anchorTerms].forEach((node) => {
-        if (!targetMap.has(node.name)) {
-            targetMap.set(node.name, node);
+        const key = `${node.domainKey || 'analog-domain'}::${node.name}`;
+        if (!targetMap.has(key)) {
+            targetMap.set(key, node);
         }
     });
     return [...targetMap.values()];
 }
 
-function layoutNodes(nodes, x, height, side) {
+function layoutNodes(nodes, x, height, side, relatedCorrespondences) {
     const centralityMap = new Map();
-    const domainCorrespondences = getCorrespondencesForSelectedDomain();
+    const domainCorrespondences = relatedCorrespondences || getCorrespondencesForSelectedDomain();
     domainCorrespondences.forEach((item) => {
         const key = side === 'source' ? item.sourceRole.name : item.targetRole.name;
         centralityMap.set(key, (centralityMap.get(key) || 0) + 1);
@@ -966,31 +972,64 @@ function layoutNodes(nodes, x, height, side) {
     }));
 }
 
+function layoutTargetNodes(nodes, domains, x, height, correspondences) {
+    const groups = domains.map((domain) => ({
+        ...domain,
+        nodes: nodes.filter((node) => node.domainKey === domain.key)
+    })).filter((group) => group.nodes.length);
+
+    const totalNodes = Math.max(nodes.length, 1);
+    const gap = 26;
+    const usableHeight = height - 168 - gap * Math.max(groups.length - 1, 0);
+    let cursorY = 84;
+
+    return groups.flatMap((group) => {
+        const groupHeight = Math.max(usableHeight * (group.nodes.length / totalNodes), 68);
+        const spacing = group.nodes.length > 1 ? (groupHeight - 40) / (group.nodes.length - 1) : 0;
+        const centralityMap = new Map();
+        correspondences
+            .filter((item) => getDomainKey(item) === group.key)
+            .forEach((item) => centralityMap.set(item.targetRole.name, (centralityMap.get(item.targetRole.name) || 0) + 1));
+
+        const layout = group.nodes.map((node, index) => ({
+            ...node,
+            x,
+            y: cursorY + 20 + index * spacing,
+            radius: 7 + Math.min(centralityMap.get(node.name) || 0, 3)
+        }));
+
+        cursorY += groupHeight + gap;
+        return layout;
+    });
+}
+
 function renderNodeGuides(sourceLayout, targetLayout, leftStubX, rightStubX, linkedSourceNames, linkedTargetNames) {
     const leftStubs = sourceLayout
         .filter((node) => !linkedSourceNames.has(node.name))
         .map((node) => `<path class="stub-path" d="${createRibbonPath(node.x, node.y, leftStubX, node.y)}"></path>`)
         .join('');
     const rightStubs = targetLayout
-        .filter((node) => !linkedTargetNames.has(node.name))
+        .filter((node) => !linkedTargetNames.has(`${node.domainKey}::${node.name}`))
         .map((node) => `<path class="stub-path" d="${createRibbonPath(rightStubX, node.y, node.x, node.y)}"></path>`)
         .join('');
     return `${leftStubs}${rightStubs}`;
 }
 
-function renderChords(correspondences, sourceLayout, targetLayout) {
+function renderChords(correspondences, sourceLayout, targetLayout, highlightedDomainKey) {
     return correspondences.map((correspondence) => {
         const source = sourceLayout.find((node) => node.name === correspondence.sourceRole.name);
-        const target = targetLayout.find((node) => node.name === correspondence.targetRole.name);
+        const target = targetLayout.find((node) => node.name === correspondence.targetRole.name && node.domainKey === getDomainKey(correspondence));
         if (!source || !target) {
             return '';
         }
         const activeClass = correspondence.id === state.selectedCorrespondenceId ? 'active' : '';
+        const dimmedClass = highlightedDomainKey && highlightedDomainKey !== getDomainKey(correspondence) ? 'dimmed-domain' : '';
         const strokeWidth = 2 + normalizeConfidence(correspondence.confidence) * 9;
         return `
             <path
-                class="diagram-chord ${activeClass}"
+                class="diagram-chord ${activeClass} ${dimmedClass}"
                 data-id="${correspondence.id}"
+                data-domain-key="${escapeHtml(getDomainKey(correspondence))}"
                 data-source="${escapeHtml(source.name)}"
                 data-target="${escapeHtml(target.name)}"
                 d="${createRibbonPath(source.x, source.y, target.x, target.y)}"
@@ -1003,12 +1042,22 @@ function renderChords(correspondences, sourceLayout, targetLayout) {
 
 function renderNodeMarks(nodes, linkedNames, side) {
     return nodes.map((node) => `
-        <g class="entity-node ${linkedNames.has(node.name) ? '' : 'unlinked'}" data-side="${side}" data-name="${escapeHtml(node.name)}">
+        <g class="entity-node ${side === 'target' && state.highlightedDomainKey && state.highlightedDomainKey !== node.domainKey ? 'dimmed-domain' : ''} ${linkedNames.has(side === 'target' ? `${node.domainKey}::${node.name}` : node.name) ? '' : 'unlinked'}" data-side="${side}" data-name="${escapeHtml(node.name)}" ${side === 'target' ? `data-domain-key="${escapeHtml(node.domainKey || '')}"` : ''}>
             <circle class="entity-dot" cx="${node.x}" cy="${node.y}" r="${node.radius}"></circle>
             <text class="entity-label entity-label-${side}" x="${side === 'source' ? node.x - 18 : node.x + 18}" y="${node.y + 4}" text-anchor="${side === 'source' ? 'end' : 'start'}">${escapeHtml(node.name)}</text>
             <circle class="entity-hit" cx="${node.x}" cy="${node.y}" r="${Math.max(node.radius + 18, 22)}"></circle>
         </g>
     `).join('');
+}
+
+function renderDomainLabels(domains, targetLayout, width) {
+    return domains.map((domain) => {
+        const domainNodes = targetLayout.filter((node) => node.domainKey === domain.key);
+        if (!domainNodes.length) {
+            return '';
+        }
+        return `<text x="${width - 320}" y="${Math.max(54, domainNodes[0].y - 18)}" class="domain-cluster-label ${state.highlightedDomainKey === domain.key ? 'active' : ''}">${escapeHtml(domain.label)}</text>`;
+    }).join('');
 }
 
 function renderEmptyChordState(width, height) {
@@ -1047,7 +1096,9 @@ function attachGraphInteractions(container, sourceLayout, targetLayout, correspo
     allChords.forEach((chord) => {
         chord.addEventListener('click', () => {
             state.selectedCorrespondenceId = chord.getAttribute('data-id');
+            state.highlightedDomainKey = chord.getAttribute('data-domain-key') || null;
             state.graphPopover = null;
+            renderCandidates();
             renderGraph();
             renderDetailPanel();
         });
@@ -1074,11 +1125,12 @@ function attachGraphInteractions(container, sourceLayout, targetLayout, correspo
         node.addEventListener('mouseleave', clearHighlights);
         node.addEventListener('click', (event) => {
             event.stopPropagation();
-            const related = correspondences.filter((item) => item.sourceRole.name === nodeName || item.targetRole.name === nodeName);
+            const domainKey = node.getAttribute('data-domain-key');
+            const related = correspondences.filter((item) => item.sourceRole.name === nodeName || (item.targetRole.name === nodeName && (!domainKey || getDomainKey(item) === domainKey)));
             state.graphPopover = {
                 side: node.getAttribute('data-side') === 'source' ? 'User domain' : 'Analog domain',
                 name: nodeName,
-                description: related.length ? `${related.length} mapped correspondence${related.length === 1 ? '' : 's'} involve this entity.` : 'No verified correspondence currently touches this entity.',
+                description: related.length ? `${related.length} mapped correspondence${related.length === 1 ? '' : 's'} involve this entity.` : 'No proposed correspondence currently touches this entity.',
                 chords: related.length ? related.map((item) => `${item.sourceRole.name} -> ${item.targetRole.name}`) : ['Visible as a gap / caveat in this pairing.'],
                 x: Math.min(event.offsetX + 20, container.clientWidth - 280),
                 y: Math.min(event.offsetY + 20, container.clientHeight - 220)
@@ -1157,6 +1209,10 @@ function labelForField(field) {
         generic: 'Generic structural view'
     };
     return labels[field] || 'Generic structural view';
+}
+
+function translatedForFieldLabel(field) {
+    return `Translated for ${labelForField(field).toLowerCase()}`;
 }
 
 function statusIcon(status) {
