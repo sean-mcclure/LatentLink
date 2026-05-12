@@ -4,7 +4,7 @@
 
 const BACK4APP_CONFIG = {
     applicationId: '3JXJecrqAo6MxPy1yDSAUJJWlilCLQ2Y6ZcKOqDx',
-    javascriptKey: 'njWMBrden8qHZgYLWxyAgIhWLxbeMadH8yx06QlV',
+    javascriptKey: 'sAAUAE7IJv4oD9heLgmPmbnvgaxxczBPHPx1gkmn',
     serverURL: 'https://parseapi.back4app.com'
 };
 
