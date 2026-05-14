@@ -187,6 +187,21 @@ h3 {
     margin-top: 18px;
 }
 
+.verification-shell,
+.pricing-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+    margin-top: 18px;
+}
+
+.library-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    gap: 14px;
+    margin: 20px 0;
+}
+
 .workspace-grid {
     grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
     align-items: start;
@@ -233,7 +248,9 @@ h3 {
 .fingerprint-grid,
 .candidate-grid,
 .detail-stack,
-.notebooks-grid {
+.notebooks-grid,
+.pricing-card-grid,
+.verification-shell {
     display: grid;
     gap: 14px;
 }
@@ -370,7 +387,9 @@ label {
 .detail-section,
 .evidence-card,
 .mapping-row,
-.purpose-card {
+.purpose-card,
+.pricing-card,
+.verification-card {
     border: 1px solid var(--border);
     background: rgba(255, 255, 255, 0.02);
     padding: 14px;
@@ -381,7 +400,9 @@ label {
 .detail-section h3,
 .notebook-card h3,
 .mapping-row h4,
-.purpose-card h3 {
+.purpose-card h3,
+.pricing-card h3,
+.verification-card h3 {
     display: block;
     margin-bottom: 8px;
     font-family: 'DM Serif Display', serif;
@@ -396,8 +417,34 @@ label {
 .fingerprint-card p,
 .evidence-card p,
 .notebook-card p,
-.purpose-card p {
+.purpose-card p,
+.pricing-card p,
+.verification-card p {
     color: var(--text-muted);
+}
+
+.pricing-card.popular {
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow-glow);
+}
+
+.price {
+    margin: 14px 0 8px;
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 4vw, 3.1rem);
+    line-height: 0.95;
+}
+
+.price-compare {
+    margin-left: 10px;
+    font-family: 'Instrument Sans', sans-serif;
+    font-size: 0.92rem;
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+
+.verified-banner {
+    color: var(--accent-2);
 }
 
 .purpose-kicker {
@@ -638,6 +685,10 @@ label {
     min-height: 520px;
 }
 
+.post-analysis-banner {
+    border-color: rgba(122, 245, 200, 0.5);
+}
+
 .detail-stack {
     margin-top: 18px;
 }
@@ -656,7 +707,8 @@ label {
 }
 
 .candidate-grid,
-.notebooks-grid {
+.notebooks-grid,
+.pricing-card-grid {
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
 }
 
@@ -766,6 +818,14 @@ label {
     font-size: 0.72rem;
 }
 
+#user-credit-badge {
+    color: var(--accent);
+}
+
+#user-credit-badge.low-credit {
+    color: var(--warning);
+}
+
 .user-dropdown {
     position: absolute;
     right: 0;
@@ -790,14 +850,23 @@ label {
     margin-bottom: 10px;
 }
 
-.usage-bar {
-    height: 10px;
-    border: 1px solid var(--border);
+.credit-batch-list {
+    display: grid;
+    gap: 8px;
 }
 
-.usage-bar-fill {
-    height: 100%;
-    background: var(--accent);
+.credit-batch-item {
+    display: grid;
+    gap: 2px;
+    padding: 10px 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    font-size: 0.86rem;
+    color: var(--text-muted);
+}
+
+.credit-batch-item strong {
+    color: var(--text-primary);
+    font-weight: 600;
 }
 
 .no-notebooks {
@@ -814,6 +883,10 @@ label {
     }
 
     .purpose-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .library-toolbar {
         grid-template-columns: 1fr;
     }
 

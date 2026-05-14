@@ -9,6 +9,7 @@ class NotebookManager {
             title: '',
             manuscript: null,
             field: 'generic',
+            note: '',
             pipeline: [],
             fingerprint: null,
             correspondences: [],
@@ -16,28 +17,78 @@ class NotebookManager {
             renderings: [],
             verificationSummary: null,
             savedId: null,
+            manuscriptHash: null,
+            creditsCharged: 0,
+            parentAnalysisId: null,
+            pins: {},
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
     }
 
+    normalizeCorrespondences(correspondences, pinMap = {}) {
+        return (Array.isArray(correspondences) ? correspondences : [])
+            .map((item, index) => {
+                const id = item.id || `corr-${index + 1}`;
+                const pin = pinMap[id] || null;
+                return {
+                    ...item,
+                    id,
+                    pin: pin ? {
+                        id: pin.id,
+                        annotation: pin.annotation || '',
+                        isRelevant: typeof pin.isRelevant === 'boolean' ? pin.isRelevant : true,
+                        createdAt: pin.createdAt || null
+                    } : null
+                };
+            })
+            .sort((left, right) => {
+                const leftPinned = left.pin ? 1 : 0;
+                const rightPinned = right.pin ? 1 : 0;
+                if (leftPinned !== rightPinned) {
+                    return rightPinned - leftPinned;
+                }
+
+                const leftRelevant = left.pin?.isRelevant === false ? 1 : 0;
+                const rightRelevant = right.pin?.isRelevant === false ? 1 : 0;
+                if (leftRelevant !== rightRelevant) {
+                    return leftRelevant - rightRelevant;
+                }
+
+                return 0;
+            });
+    }
+
+    applyPinsToNotebook(notebook, pinMap = {}) {
+        const correspondences = this.normalizeCorrespondences(notebook.correspondences || notebook.renderings || [], pinMap);
+        return {
+            ...notebook,
+            correspondences,
+            renderings: correspondences,
+            pins: pinMap
+        };
+    }
+
     async startNewNotebook(meta = {}) {
-        this.currentNotebook = {
+        this.currentNotebook = this.applyPinsToNotebook({
             ...this.createEmptyNotebook(),
             title: meta.title || 'Untitled analysis',
             field: meta.field || 'generic',
-            manuscript: meta.manuscript || null
-        };
+            manuscript: meta.manuscript || null,
+            manuscriptHash: meta.manuscriptHash || null,
+            parentAnalysisId: meta.parentAnalysisId || null,
+            note: meta.note || ''
+        });
 
         return this.currentNotebook;
     }
 
     updateCurrentNotebook(patch) {
-        this.currentNotebook = {
+        this.currentNotebook = this.applyPinsToNotebook({
             ...this.currentNotebook,
             ...patch,
             updatedAt: new Date().toISOString()
-        };
+        }, patch.pins || this.currentNotebook.pins || {});
         return this.currentNotebook;
     }
 
@@ -54,51 +105,117 @@ class NotebookManager {
         );
     }
 
+    createAnalysisACL(user) {
+        const acl = new Parse.ACL(user);
+        acl.setPublicReadAccess(false);
+        acl.setPublicWriteAccess(false);
+        return acl;
+    }
+
     async saveNotebook(customTitle = null) {
         try {
             const user = Parse.User.current();
             if (!user) {
-                throw new Error('Must be logged in to save sessions');
+                throw new Error('Must be logged in to save analyses');
             }
 
-            const Notebook = Parse.Object.extend('Notebook');
-            let notebook;
+            const Analysis = Parse.Object.extend('Analysis');
+            let analysis;
             let isUpdate = false;
 
             if (this.currentNotebook.savedId) {
-                const query = new Parse.Query(Notebook);
-                notebook = await query.get(this.currentNotebook.savedId);
+                const query = new Parse.Query(Analysis);
+                analysis = await query.get(this.currentNotebook.savedId);
                 isUpdate = true;
             } else {
-                notebook = new Notebook();
-                notebook.set('user', user);
+                analysis = new Analysis();
+                analysis.setACL(this.createAnalysisACL(user));
+                analysis.set('user', user);
             }
 
             const title = customTitle || this.currentNotebook.title || 'Untitled analysis';
-            notebook.set('title', title);
-            notebook.set('domains', [{ area: this.currentNotebook.field, query: title }]);
-            notebook.set('connections', this.currentNotebook.correspondences || []);
-            notebook.set('analogies', this.currentNotebook.correspondences || []);
-            notebook.set('patterns', this.currentNotebook.fingerprint?.dynamics || []);
-            notebook.set('hypotheses', []);
-            notebook.set('analysisRun', this.currentNotebook);
-            notebook.set('manuscript', this.currentNotebook.manuscript || null);
-            notebook.set('fingerprint', this.currentNotebook.fingerprint || null);
-            notebook.set('renderings', this.currentNotebook.renderings || []);
-            notebook.set('verificationSummary', this.currentNotebook.verificationSummary || null);
+            const manuscript = this.currentNotebook.manuscript || {};
+            const correspondences = this.normalizeCorrespondences(this.currentNotebook.correspondences || this.currentNotebook.renderings, this.currentNotebook.pins || {});
 
-            await notebook.save();
+            analysis.set('manuscript_title', title);
+            analysis.set('title', title);
+            analysis.set('manuscript', manuscript);
+            analysis.set('manuscript_text', manuscript.rawText || this.currentNotebook.manuscript?.rawText || '');
+            analysis.set('manuscript_hash', this.currentNotebook.manuscriptHash || null);
+            analysis.set('fingerprint', this.currentNotebook.fingerprint || null);
+            analysis.set('correspondences', correspondences);
+            analysis.set('field_rendering', {
+                [this.currentNotebook.field || 'generic']: correspondences
+            });
+            analysis.set('renderings', correspondences);
+            analysis.set('candidates', this.currentNotebook.candidates || []);
+            analysis.set('verification_summary', this.currentNotebook.verificationSummary || null);
+            analysis.set('verificationSummary', this.currentNotebook.verificationSummary || null);
+            analysis.set('pipeline', this.currentNotebook.pipeline || []);
+            analysis.set('field', this.currentNotebook.field || 'generic');
+            analysis.set('credits_charged', this.currentNotebook.creditsCharged || 0);
+            analysis.set('note', this.currentNotebook.note || '');
 
-            this.currentNotebook.savedId = notebook.id;
+            if (this.currentNotebook.parentAnalysisId) {
+                const parent = new Analysis();
+                parent.id = this.currentNotebook.parentAnalysisId;
+                analysis.set('parent_analysis', parent);
+            }
+
+            await analysis.save();
+
+            this.currentNotebook.savedId = analysis.id;
+            await this.persistPinsForCurrentNotebook();
             return {
                 success: true,
-                notebookId: notebook.id,
+                notebookId: analysis.id,
                 message: isUpdate ? 'Analysis updated' : 'Analysis saved'
             };
         } catch (error) {
-            console.error('Save notebook error:', error);
+            console.error('Save analysis error:', error);
             return { success: false, error: error.message };
         }
+    }
+
+    buildPinMap(pinObjects) {
+        return pinObjects.reduce((items, pin) => {
+            items[pin.get('correspondence_id')] = {
+                id: pin.id,
+                annotation: pin.get('annotation') || '',
+                isRelevant: typeof pin.get('is_relevant') === 'boolean' ? pin.get('is_relevant') : true,
+                createdAt: pin.createdAt
+            };
+            return items;
+        }, {});
+    }
+
+    buildNotebookRecord(analysisObject, pinMap = {}) {
+        const correspondences = analysisObject.get('correspondences') || analysisObject.get('renderings') || [];
+        const record = {
+            id: analysisObject.id,
+            title: analysisObject.get('manuscript_title') || analysisObject.get('title') || 'Untitled analysis',
+            analysisRun: analysisObject.toJSON(),
+            field: analysisObject.get('field') || 'generic',
+            correspondences,
+            fingerprint: analysisObject.get('fingerprint') || null,
+            manuscript: analysisObject.get('manuscript') || null,
+            verificationSummary: analysisObject.get('verification_summary') || analysisObject.get('verificationSummary') || null,
+            manuscriptHash: analysisObject.get('manuscript_hash') || null,
+            creditsCharged: analysisObject.get('credits_charged') || 0,
+            parentAnalysisId: analysisObject.get('parent_analysis')?.id || null,
+            note: analysisObject.get('note') || '',
+            pipeline: analysisObject.get('pipeline') || [],
+            candidates: analysisObject.get('candidates') || [],
+            updatedAt: analysisObject.updatedAt,
+            createdAt: analysisObject.createdAt,
+            pins: pinMap
+        };
+
+        const withPins = this.applyPinsToNotebook(record, pinMap);
+        return {
+            ...withPins,
+            pinnedCount: Object.keys(pinMap).length
+        };
     }
 
     async loadNotebooks() {
@@ -109,27 +226,41 @@ class NotebookManager {
                 return { success: true, count: 0, notebooks: [] };
             }
 
-            const Notebook = Parse.Object.extend('Notebook');
-            const query = new Parse.Query(Notebook);
-            query.equalTo('user', user);
-            query.descending('updatedAt');
+            const Analysis = Parse.Object.extend('Analysis');
+            const analysisQuery = new Parse.Query(Analysis);
+            analysisQuery.equalTo('user', user);
+            analysisQuery.descending('updatedAt');
 
-            const notebooks = await query.find();
-            this.savedNotebooks = notebooks.map((notebook) => {
-                const analysisRun = notebook.get('analysisRun') || {};
-                return {
-                    id: notebook.id,
-                    title: notebook.get('title') || 'Untitled analysis',
-                    analysisRun,
-                    field: analysisRun.field || notebook.get('domains')?.[0]?.area || 'generic',
-                    correspondences: analysisRun.correspondences || notebook.get('connections') || [],
-                    fingerprint: analysisRun.fingerprint || notebook.get('fingerprint') || null,
-                    manuscript: analysisRun.manuscript || notebook.get('manuscript') || null,
-                    verificationSummary: analysisRun.verificationSummary || notebook.get('verificationSummary') || null,
-                    updatedAt: notebook.updatedAt,
-                    createdAt: notebook.createdAt
-                };
-            });
+            const analysisObjects = await analysisQuery.find();
+            const pinMapByAnalysisId = {};
+
+            if (analysisObjects.length) {
+                const Pin = Parse.Object.extend('Pin');
+                const pinQuery = new Parse.Query(Pin);
+                pinQuery.equalTo('user', user);
+                pinQuery.containedIn('analysis', analysisObjects);
+                const pinObjects = await pinQuery.find();
+
+                pinObjects.forEach((pin) => {
+                    const analysisId = pin.get('analysis')?.id;
+                    if (!analysisId) {
+                        return;
+                    }
+
+                    if (!pinMapByAnalysisId[analysisId]) {
+                        pinMapByAnalysisId[analysisId] = {};
+                    }
+
+                    pinMapByAnalysisId[analysisId][pin.get('correspondence_id')] = {
+                        id: pin.id,
+                        annotation: pin.get('annotation') || '',
+                        isRelevant: typeof pin.get('is_relevant') === 'boolean' ? pin.get('is_relevant') : true,
+                        createdAt: pin.createdAt
+                    };
+                });
+            }
+
+            this.savedNotebooks = analysisObjects.map((analysisObject) => this.buildNotebookRecord(analysisObject, pinMapByAnalysisId[analysisObject.id] || {}));
 
             return {
                 success: true,
@@ -137,7 +268,7 @@ class NotebookManager {
                 notebooks: this.savedNotebooks
             };
         } catch (error) {
-            console.error('Load notebooks error:', error);
+            console.error('Load analyses error:', error);
             return { success: false, error: error.message, notebooks: [] };
         }
     }
@@ -148,7 +279,7 @@ class NotebookManager {
             return null;
         }
 
-        this.currentNotebook = {
+        this.currentNotebook = this.applyPinsToNotebook({
             ...this.createEmptyNotebook(),
             ...notebook.analysisRun,
             title: notebook.title,
@@ -157,56 +288,138 @@ class NotebookManager {
             fingerprint: notebook.fingerprint,
             correspondences: notebook.correspondences,
             manuscript: notebook.manuscript,
-            verificationSummary: notebook.verificationSummary
-        };
+            verificationSummary: notebook.verificationSummary,
+            manuscriptHash: notebook.manuscriptHash,
+            creditsCharged: notebook.creditsCharged,
+            parentAnalysisId: notebook.parentAnalysisId,
+            note: notebook.note,
+            pipeline: notebook.pipeline,
+            candidates: notebook.candidates,
+            pins: notebook.pins
+        }, notebook.pins || {});
 
         return this.currentNotebook;
     }
 
-    async deleteNotebook(notebookId) {
+    getNotebookByHash(manuscriptHash) {
+        return this.savedNotebooks.find((item) => item.manuscriptHash && item.manuscriptHash === manuscriptHash) || null;
+    }
+
+    async renameNotebook(notebookId, nextTitle) {
         try {
-            const Notebook = Parse.Object.extend('Notebook');
-            const query = new Parse.Query(Notebook);
-            const notebook = await query.get(notebookId);
-            await notebook.destroy();
-            this.savedNotebooks = this.savedNotebooks.filter((item) => item.id !== notebookId);
+            const Analysis = Parse.Object.extend('Analysis');
+            const query = new Parse.Query(Analysis);
+            const analysis = await query.get(notebookId);
+            analysis.set('manuscript_title', nextTitle);
+            analysis.set('title', nextTitle);
+            await analysis.save();
+
+            if (this.currentNotebook.savedId === notebookId) {
+                this.currentNotebook.title = nextTitle;
+            }
+
             return { success: true };
         } catch (error) {
-            console.error('Delete notebook error:', error);
+            console.error('Rename analysis error:', error);
             return { success: false, error: error.message };
         }
     }
 
-    async canCreateNotebook() {
+    async deleteNotebook(notebookId) {
+        try {
+            const Analysis = Parse.Object.extend('Analysis');
+            const Pin = Parse.Object.extend('Pin');
+            const query = new Parse.Query(Analysis);
+            const analysis = await query.get(notebookId);
+
+            const pinQuery = new Parse.Query(Pin);
+            pinQuery.equalTo('analysis', analysis);
+            const pins = await pinQuery.find();
+            if (pins.length) {
+                await Parse.Object.destroyAll(pins);
+            }
+
+            await analysis.destroy();
+            this.savedNotebooks = this.savedNotebooks.filter((item) => item.id !== notebookId);
+            return { success: true };
+        } catch (error) {
+            console.error('Delete analysis error:', error);
+            return { success: false, error: error.message };
+        }
+    }
+
+    async persistPin({ analysisId, correspondenceId, annotation, isRelevant }) {
         try {
             const user = Parse.User.current();
             if (!user) {
-                return { allowed: false, reason: 'auth', message: 'Must be logged in' };
+                throw new Error('Must be logged in');
+            }
+            if (!analysisId) {
+                throw new Error('Save the analysis before pinning correspondences');
             }
 
-            const subscriptionStatus = user.get('subscriptionStatus') || 'inactive';
-            if (subscriptionStatus === 'active') {
-                return { allowed: true, reason: 'premium' };
+            const Analysis = Parse.Object.extend('Analysis');
+            const Pin = Parse.Object.extend('Pin');
+            const analysis = new Analysis();
+            analysis.id = analysisId;
+
+            const pinQuery = new Parse.Query(Pin);
+            pinQuery.equalTo('user', user);
+            pinQuery.equalTo('analysis', analysis);
+            pinQuery.equalTo('correspondence_id', correspondenceId);
+            let pin = await pinQuery.first();
+            if (!pin) {
+                pin = new Pin();
+                pin.setACL(this.createAnalysisACL(user));
+                pin.set('user', user);
+                pin.set('analysis', analysis);
+                pin.set('correspondence_id', correspondenceId);
             }
 
-            if (!this.savedNotebooks.length) {
-                await this.loadNotebooks();
-            }
+            pin.set('annotation', annotation || '');
+            pin.set('is_relevant', typeof isRelevant === 'boolean' ? isRelevant : true);
+            await pin.save();
 
-            const FREE_LIMIT = 3;
-            if (this.savedNotebooks.length >= FREE_LIMIT && !this.currentNotebook.savedId) {
-                return {
-                    allowed: false,
-                    reason: 'free_tier_limit',
-                    message: `Free users are limited to ${FREE_LIMIT} saved analyses. Upgrade for more.`
-                };
-            }
+            const nextPin = {
+                id: pin.id,
+                annotation: pin.get('annotation') || '',
+                isRelevant: typeof pin.get('is_relevant') === 'boolean' ? pin.get('is_relevant') : true,
+                createdAt: pin.createdAt
+            };
 
-            return { allowed: true, reason: 'free-tier-available' };
+            const nextPins = {
+                ...(this.currentNotebook.pins || {}),
+                [correspondenceId]: nextPin
+            };
+
+            this.updateCurrentNotebook({ pins: nextPins });
+            this.savedNotebooks = this.savedNotebooks.map((item) => item.id === analysisId ? this.applyPinsToNotebook({ ...item, pins: nextPins }, nextPins) : item);
+            return { success: true, pin: nextPin };
         } catch (error) {
-            console.error('Notebook limit check failed:', error);
-            return { allowed: true, reason: 'fallback' };
+            console.error('Persist pin error:', error);
+            return { success: false, error: error.message };
         }
+    }
+
+    async persistPinsForCurrentNotebook() {
+        const analysisId = this.currentNotebook.savedId;
+        if (!analysisId || !this.currentNotebook.pins) {
+            return;
+        }
+
+        const pins = Object.entries(this.currentNotebook.pins);
+        for (const [correspondenceId, pin] of pins) {
+            await this.persistPin({
+                analysisId,
+                correspondenceId,
+                annotation: pin.annotation,
+                isRelevant: pin.isRelevant
+            });
+        }
+    }
+
+    async canCreateNotebook() {
+        return { allowed: true, reason: 'analysis-library' };
     }
 }
 

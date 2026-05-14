@@ -14,7 +14,10 @@ const state = {
     highlightedDomainKey: null,
     analysis: null,
     pipelineStatus: PIPELINE_STEPS.map((step) => ({ ...step, status: 'idle', detail: step.description })),
-    notebookList: []
+    notebookList: [],
+    creditStatus: null,
+    librarySearch: '',
+    librarySort: 'date'
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -48,10 +51,12 @@ async function initializeApp() {
         state.user = authManager.getCurrentUser();
         await state.user.fetch();
         await notebookManager.loadNotebooks();
-        showMainApp();
+        state.creditStatus = await subscriptionManager.getCreditStatus(true);
+        await routeAuthenticatedUser();
         updateUserMenu();
         renderAnalysisSummary();
         renderNotebookLibrary();
+        renderPricingCards();
     } else {
         showAuthSection();
     }
@@ -63,23 +68,70 @@ function setupEventListeners() {
     const newAnalysisBtn = document.getElementById('new-analysis-btn');
     const viewNotebooksBtn = document.getElementById('view-notebooks-btn');
     const backToAppBtn = document.getElementById('back-to-app-btn');
+    const openPricingBtn = document.getElementById('open-pricing-btn');
+    const librarySearch = document.getElementById('library-search');
+    const librarySort = document.getElementById('library-sort');
 
     analyzeBtn?.addEventListener('click', runAnalysis);
     saveSessionBtn?.addEventListener('click', saveCurrentAnalysis);
     newAnalysisBtn?.addEventListener('click', resetWorkspace);
     viewNotebooksBtn?.addEventListener('click', showNotebooksView);
     backToAppBtn?.addEventListener('click', showMainApp);
+    openPricingBtn?.addEventListener('click', showPricingSection);
+    document.getElementById('banner-buy-starter-btn')?.addEventListener('click', () => handlePackPurchase('starter'));
+
+    librarySearch?.addEventListener('input', (event) => {
+        state.librarySearch = event.target.value.trim().toLowerCase();
+        renderNotebookLibrary();
+    });
+    librarySort?.addEventListener('change', (event) => {
+        state.librarySort = event.target.value;
+        renderNotebookLibrary();
+    });
 
     document.getElementById('close-upgrade-modal')?.addEventListener('click', () => {
         document.getElementById('upgrade-modal').style.display = 'none';
     });
-    document.getElementById('upgrade-now-btn')?.addEventListener('click', async () => {
+    document.getElementById('upgrade-now-btn')?.addEventListener('click', () => {
+        document.getElementById('upgrade-modal').style.display = 'none';
+        showPricingSection();
+    });
+
+    document.getElementById('verify-email-btn')?.addEventListener('click', async () => {
+        const email = document.getElementById('institutional-email').value.trim();
+        if (!email) {
+            showToast('Enter an institutional email first.', 'warning');
+            return;
+        }
+        showLoading('Saving researcher verification...');
         try {
-            showLoading('Redirecting to Stripe...');
-            await subscriptionManager.createCheckoutSession();
+            state.creditStatus = await subscriptionManager.verifyResearcher('institutional_email', email);
+            refreshCreditStatusUI();
+            renderPricingCards();
+            showToast('Researcher pricing enabled.', 'success');
         } catch (error) {
-            hideLoading();
             showToast(error.message, 'error');
+        } finally {
+            hideLoading();
+        }
+    });
+
+    document.getElementById('verify-orcid-btn')?.addEventListener('click', async () => {
+        const orcidId = document.getElementById('orcid-id').value.trim();
+        if (!orcidId) {
+            showToast('Enter an ORCID iD first.', 'warning');
+            return;
+        }
+        showLoading('Saving researcher verification...');
+        try {
+            state.creditStatus = await subscriptionManager.verifyResearcher('orcid', orcidId);
+            refreshCreditStatusUI();
+            renderPricingCards();
+            showToast('Researcher pricing enabled.', 'success');
+        } catch (error) {
+            showToast(error.message, 'error');
+        } finally {
+            hideLoading();
         }
     });
 }
@@ -104,7 +156,8 @@ function setupAuthListeners() {
 
         state.user = result.user;
         await notebookManager.loadNotebooks();
-        showMainApp();
+        state.creditStatus = await subscriptionManager.getCreditStatus(true);
+        await routeAuthenticatedUser();
         updateUserMenu();
         renderNotebookLibrary();
     });
@@ -129,20 +182,13 @@ function setupAuthListeners() {
         }
 
         state.user = result.user;
-        showMainApp();
+        await notebookManager.loadNotebooks();
+        state.creditStatus = await subscriptionManager.getCreditStatus(true);
+        await routeAuthenticatedUser();
         updateUserMenu();
         renderNotebookLibrary();
-        showToast('Account created. You can save up to 3 analyses on the free tier.', 'success');
-    });
-
-    document.getElementById('subscribe-btn')?.addEventListener('click', async () => {
-        try {
-            showLoading('Redirecting to Stripe...');
-            await subscriptionManager.createCheckoutSession();
-        } catch (error) {
-            hideLoading();
-            showToast(error.message, 'error');
-        }
+        renderPricingCards();
+        showToast('Account created. Your first full analysis is free.', 'success');
     });
 
     document.getElementById('show-signup')?.addEventListener('click', (event) => {
@@ -202,6 +248,14 @@ function showMainApp() {
     renderAnalysisSummary();
 }
 
+function showPricingSection() {
+    document.getElementById('auth-section').style.display = 'none';
+    document.getElementById('subscription-section').style.display = 'block';
+    document.getElementById('main-app').style.display = 'none';
+    document.getElementById('notebooks-view').style.display = 'none';
+    renderPricingCards();
+}
+
 async function showNotebooksView() {
     await notebookManager.loadNotebooks();
     renderNotebookLibrary();
@@ -209,6 +263,19 @@ async function showNotebooksView() {
     document.getElementById('subscription-section').style.display = 'none';
     document.getElementById('main-app').style.display = 'none';
     document.getElementById('notebooks-view').style.display = 'block';
+}
+
+async function routeAuthenticatedUser() {
+    const hasAnalyses = (notebookManager.savedNotebooks || []).length > 0;
+    const hasFreeAnalysis = state.creditStatus?.freeAnalysisAvailable;
+    const paidCredits = state.creditStatus?.creditsBalance || 0;
+
+    if (!hasAnalyses && !hasFreeAnalysis && paidCredits === 0) {
+        showPricingSection();
+        return;
+    }
+
+    showMainApp();
 }
 
 function updateUserMenu() {
@@ -223,16 +290,16 @@ function updateUserMenu() {
         menu.className = 'user-menu';
         menu.innerHTML = `
             <button class="user-button" id="user-menu-btn">
+                <span id="user-credit-badge">0 credits</span>
                 <span>${escapeHtml(user.get('name') || user.get('email'))}</span>
-                <span>+</span>
             </button>
             <div class="user-dropdown" id="user-dropdown">
                 <div class="usage-indicator">
-                    <div id="usage-text">Loading...</div>
-                    <div class="usage-bar"><div id="usage-bar-fill" class="usage-bar-fill"></div></div>
+                    <div id="usage-text">Loading credits...</div>
+                    <div id="credit-batches" class="credit-batch-list"></div>
                 </div>
                 <div class="user-dropdown-item" id="menu-open-library">Open library</div>
-                <div class="user-dropdown-item" id="menu-manage-subscription">Manage subscription</div>
+                <div class="user-dropdown-item" id="menu-open-pricing">Buy credits</div>
                 <div class="user-dropdown-item" id="logout-btn">Sign out</div>
             </div>
         `;
@@ -242,15 +309,7 @@ function updateUserMenu() {
             document.getElementById('user-dropdown').classList.toggle('show');
         });
         document.getElementById('menu-open-library').addEventListener('click', showNotebooksView);
-        document.getElementById('menu-manage-subscription').addEventListener('click', async () => {
-            try {
-                showLoading('Opening portal...');
-                await subscriptionManager.createPortalSession();
-            } catch (error) {
-                hideLoading();
-                showToast(error.message, 'error');
-            }
-        });
+        document.getElementById('menu-open-pricing').addEventListener('click', showPricingSection);
         document.getElementById('logout-btn').addEventListener('click', async () => {
             await authManager.logOut();
             location.reload();
@@ -271,37 +330,76 @@ async function updateUsageStats() {
         return;
     }
 
-    const subscriptionStatus = user.get('subscriptionStatus') || 'inactive';
     const usageTextEl = document.getElementById('usage-text');
-    const usageBarFill = document.getElementById('usage-bar-fill');
+    const batchListEl = document.getElementById('credit-batches');
+    const badgeEl = document.getElementById('user-credit-badge');
 
-    if (!usageTextEl || !usageBarFill) {
+    if (!usageTextEl || !batchListEl || !badgeEl) {
         return;
     }
 
-    if (subscriptionStatus === 'active') {
-        usageTextEl.textContent = 'Premium active';
-        usageBarFill.style.width = '100%';
-        usageBarFill.style.background = 'linear-gradient(90deg, var(--accent), var(--accent-2))';
-        return;
-    }
+    state.creditStatus = await subscriptionManager.getCreditStatus(true);
+    const balance = state.creditStatus?.creditsBalance || 0;
+    const lowCredit = state.creditStatus?.lowCredit;
+    const freeText = state.creditStatus?.freeAnalysisAvailable ? '1 free analysis available' : 'Free analysis already used';
 
-    const result = await notebookManager.loadNotebooks();
-    const percentage = Math.min(100, ((result.count || 0) / 3) * 100);
-    usageTextEl.textContent = `Free tier: ${result.count || 0} / 3 saved analyses`;
-    usageBarFill.style.width = `${percentage}%`;
-    usageBarFill.style.background = 'var(--accent)';
+    badgeEl.textContent = `${balance} credit${balance === 1 ? '' : 's'}`;
+    badgeEl.className = lowCredit ? 'low-credit' : '';
+    usageTextEl.textContent = `${balance} credits available · ${freeText}`;
+    batchListEl.innerHTML = (state.creditStatus?.creditBatches || []).map((batch) => `
+        <div class="credit-batch-item">
+            <strong>${escapeHtml(batch.packTier || 'pack')}</strong>
+            <span>${batch.creditsRemaining}/${batch.creditsInitial} left</span>
+            <span>Expires ${new Date(batch.expiresAt).toLocaleDateString()}</span>
+        </div>
+    `).join('') || '<p class="muted-copy">No paid credit batches yet.</p>';
+
+    refreshCreditStatusUI();
 }
 
 async function runAnalysis() {
-    const canCreate = await notebookManager.canCreateNotebook();
-    if (!canCreate.allowed) {
-        showUpgradeModal(canCreate.message);
+    const intake = await gatherManuscriptInput();
+    if (!intake) {
         return;
     }
 
-    const intake = await gatherManuscriptInput();
-    if (!intake) {
+    const manuscriptHash = await computeManuscriptHash(intake.rawText);
+    const existingAnalysis = notebookManager.getNotebookByHash(manuscriptHash);
+    if (existingAnalysis) {
+        const loaded = notebookManager.loadNotebook(existingAnalysis.id);
+        state.analysis = loaded;
+        state.pipelineStatus = loaded.pipeline?.length ? loaded.pipeline : PIPELINE_STEPS.map((step) => ({ ...step, status: 'idle', detail: step.description }));
+        syncSelectionState();
+        renderPipelineStatus();
+        renderAnalysis();
+        renderAnalysisSummary();
+        showToast('Opened your existing analysis for this manuscript. No credit used.', 'success');
+        return;
+    }
+
+    const eligibility = await subscriptionManager.getAnalysisEligibility('analysis');
+    if (!eligibility.allowed) {
+        showUpgradeModal(eligibility.message);
+        return;
+    }
+
+    let chargeResult = null;
+    if (eligibility.kind === 'paid') {
+        const confirmed = window.confirm(eligibility.message);
+        if (!confirmed) {
+            return;
+        }
+    }
+
+    showLoading(eligibility.kind === 'free' ? 'Using your free analysis...' : 'Charging 1 credit and starting analysis...');
+
+    try {
+        chargeResult = await subscriptionManager.consumeAnalysisCredit('analysis');
+        state.creditStatus = chargeResult;
+        refreshCreditStatusUI();
+    } catch (error) {
+        hideLoading();
+        showToast(error.message, 'error');
         return;
     }
 
@@ -311,12 +409,13 @@ async function runAnalysis() {
     const note = document.getElementById('analysis-note').value.trim();
 
     resetPipelineStatus();
-    showLoading('Extracting manuscript...');
 
     try {
         await notebookManager.startNewNotebook({
             title,
             field,
+            note,
+            manuscriptHash,
             manuscript: { sourceName: intake.fileName || 'pasted-text', rawText: intake.rawText }
         });
 
@@ -380,22 +479,32 @@ async function runAnalysis() {
             field,
             note,
             manuscript,
+            manuscriptHash,
             fingerprint,
             correspondences: renderings.correspondences,
             candidates: correspondenceResult.candidates,
             verificationSummary: verification.summary,
             pipeline: [...state.pipelineStatus],
             renderings: renderings.correspondences,
+            creditsCharged: 1,
             updatedAt: new Date().toISOString()
         };
 
         state.analysis = analysis;
-    syncSelectionState();
+        syncSelectionState();
         notebookManager.updateCurrentNotebook(analysis);
+        await notebookManager.saveNotebook(title);
+        await notebookManager.loadNotebooks();
+        state.analysis = notebookManager.getCurrentNotebook();
 
         renderAnalysis();
         renderAnalysisSummary();
+        renderNotebookLibrary();
         hideLoading();
+        updateUsageStats();
+        if (chargeResult?.kind === 'free') {
+            showPostAnalysisBanner();
+        }
         showToast('Analysis complete.', 'success');
     } catch (error) {
         console.error(error);
@@ -443,12 +552,6 @@ async function saveCurrentAnalysis() {
         return;
     }
 
-    const canCreate = await notebookManager.canCreateNotebook();
-    if (!canCreate.allowed) {
-        showUpgradeModal(canCreate.message);
-        return;
-    }
-
     showLoading('Saving analysis...');
     const result = await notebookManager.saveNotebook(state.analysis.title);
     hideLoading();
@@ -456,6 +559,8 @@ async function saveCurrentAnalysis() {
         showToast(result.error, 'error');
         return;
     }
+
+    state.analysis = notebookManager.getCurrentNotebook();
 
     await notebookManager.loadNotebooks();
     renderNotebookLibrary();
@@ -669,6 +774,7 @@ function renderDetailPanel() {
 
     detailTitle.textContent = selected.label;
     container.classList.remove('empty-state-inline');
+    const currentPin = selected.pin || null;
     container.innerHTML = `
         <div class="detail-stack">
             <section class="detail-section">
@@ -678,7 +784,27 @@ function renderDetailPanel() {
                 <ul class="detail-list">
                     <li><span>Confidence:</span> ${Math.round(normalizeConfidence(selected.confidence) * 100)}%</li>
                     <li><span>Break-points:</span> ${(selected.breakpoints || []).map(escapeHtml).join('; ') || 'None recorded.'}</li>
+                    <li><span>Pin status:</span> ${currentPin ? (currentPin.isRelevant === false ? 'Marked wrong' : 'Pinned') : 'Not pinned'}</li>
                 </ul>
+            </section>
+
+            <section class="detail-section">
+                <span class="detail-label">Workspace actions</span>
+                <p class="detail-subtitle">Pins, annotations, and reading-list export persist with the saved analysis.</p>
+                <div class="action-row">
+                    <button id="pin-correspondence-btn" class="btn btn-primary">${currentPin?.isRelevant === false ? 'Pin Instead' : currentPin ? 'Update Pin' : 'Pin Correspondence'}</button>
+                    <button id="mark-wrong-btn" class="btn btn-secondary">${currentPin?.isRelevant === false ? 'Marked Wrong' : 'Mark As Wrong'}</button>
+                    <button id="export-reading-list-btn" class="btn btn-secondary">Export Reading List</button>
+                </div>
+                <div class="form-group">
+                    <label for="pin-annotation">Annotation</label>
+                    <textarea id="pin-annotation" class="textarea short-textarea" placeholder="Why this correspondence matters, or why it does not.">${escapeHtml(currentPin?.annotation || '')}</textarea>
+                </div>
+                <div class="action-row">
+                    <button id="save-pin-note-btn" class="btn btn-secondary">Save Annotation</button>
+                    <button class="btn btn-secondary" disabled>Send To Manifest</button>
+                    <button class="btn btn-secondary" disabled>Send To Notes2Tree</button>
+                </div>
             </section>
 
             <section class="detail-section">
@@ -717,6 +843,19 @@ function renderDetailPanel() {
             </section>
         </div>
     `;
+
+    document.getElementById('pin-correspondence-btn')?.addEventListener('click', async () => {
+        await persistSelectedPin(true);
+    });
+    document.getElementById('mark-wrong-btn')?.addEventListener('click', async () => {
+        await persistSelectedPin(false);
+    });
+    document.getElementById('save-pin-note-btn')?.addEventListener('click', async () => {
+        await persistSelectedPin(currentPin?.isRelevant === false ? false : true);
+    });
+    document.getElementById('export-reading-list-btn')?.addEventListener('click', () => {
+        showReadingListExportOptions();
+    });
 }
 
 function renderAnalysisSummary() {
@@ -741,14 +880,29 @@ function renderAnalysisSummary() {
             <strong>Verification</strong>
             <p>${escapeHtml(summarizeVerificationCounts(state.analysis.verificationSummary))}</p>
         </div>
+        <div class="summary-item">
+            <strong>Pinned</strong>
+            <p>${getPinnedCount(state.analysis)} saved correspondences</p>
+        </div>
     `;
 }
 
 function renderNotebookLibrary() {
     const container = document.getElementById('notebooks-list');
-    const notebooks = notebookManager.savedNotebooks || [];
+    const notebooks = [...(notebookManager.savedNotebooks || [])]
+        .filter((notebook) => !state.librarySearch || (notebook.title || '').toLowerCase().includes(state.librarySearch))
+        .sort((left, right) => {
+            if (state.librarySort === 'title') {
+                return (left.title || '').localeCompare(right.title || '');
+            }
+            if (state.librarySort === 'pinned') {
+                return (right.pinnedCount || 0) - (left.pinnedCount || 0);
+            }
+            return new Date(right.updatedAt) - new Date(left.updatedAt);
+        });
+
     if (!notebooks.length) {
-        container.innerHTML = '<p class="no-notebooks">No saved analyses yet.</p>';
+        container.innerHTML = '<p class="no-notebooks">No saved analyses match this filter yet.</p>';
         return;
     }
 
@@ -759,10 +913,12 @@ function renderNotebookLibrary() {
             <p>${escapeHtml(notebook.manuscript?.summary || notebook.analysisRun?.manuscript?.summary || 'Saved analysis session')}</p>
             <div class="hero-tags">
                 <span class="notebook-stat">${(notebook.correspondences || []).length} mappings</span>
+                <span class="notebook-stat">${notebook.pinnedCount || 0} pinned</span>
                 <span class="notebook-stat">${new Date(notebook.updatedAt).toLocaleDateString()}</span>
             </div>
             <div class="action-row">
                 <button class="btn btn-secondary load-notebook" data-id="${notebook.id}">Load</button>
+                <button class="btn btn-secondary rename-notebook" data-id="${notebook.id}">Rename</button>
                 <button class="btn btn-secondary delete-notebook" data-id="${notebook.id}">Delete</button>
             </div>
         </article>
@@ -782,6 +938,32 @@ function renderNotebookLibrary() {
             renderAnalysis();
             renderAnalysisSummary();
             showMainApp();
+        });
+    });
+
+    container.querySelectorAll('.rename-notebook').forEach((button) => {
+        button.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            const notebookId = button.getAttribute('data-id');
+            const current = notebooks.find((item) => item.id === notebookId);
+            const nextTitle = window.prompt('Rename analysis', current?.title || 'Untitled analysis');
+            if (!nextTitle || nextTitle === current?.title) {
+                return;
+            }
+
+            const result = await notebookManager.renameNotebook(notebookId, nextTitle.trim());
+            if (!result.success) {
+                showToast(result.error, 'error');
+                return;
+            }
+
+            await notebookManager.loadNotebooks();
+            renderNotebookLibrary();
+            if (state.analysis?.savedId === notebookId) {
+                state.analysis.title = nextTitle.trim();
+                renderAnalysisSummary();
+            }
+            showToast('Analysis renamed.', 'success');
         });
     });
 
@@ -1249,6 +1431,184 @@ function showToast(message, type = 'info') {
 function showUpgradeModal(message) {
     document.getElementById('upgrade-message').textContent = message || 'Upgrade required.';
     document.getElementById('upgrade-modal').style.display = 'flex';
+}
+
+function refreshCreditStatusUI() {
+    const banner = document.getElementById('researcher-banner');
+    if (!banner) {
+        return;
+    }
+
+    if (state.creditStatus?.isVerifiedResearcher) {
+        const method = state.creditStatus.verificationMethod === 'orcid' ? 'ORCID' : 'institutional email';
+        banner.textContent = `Researcher pricing is active via ${method}.`;
+        banner.classList.add('verified-banner');
+    } else {
+        banner.textContent = 'Verify as a researcher to save 20% on any credit pack.';
+        banner.classList.remove('verified-banner');
+    }
+}
+
+function renderPricingCards() {
+    const container = document.getElementById('pricing-cards');
+    if (!container) {
+        return;
+    }
+
+    refreshCreditStatusUI();
+    const isVerified = Boolean(state.creditStatus?.isVerifiedResearcher);
+    container.innerHTML = subscriptionManager.getPackCatalog().map((pack) => {
+        const price = isVerified ? pack.researcherPriceCents : pack.priceCents;
+        const comparePrice = isVerified ? `<span class="price-compare">${subscriptionManager.formatPrice(pack.priceCents)}</span>` : '';
+        return `
+            <article class="pricing-card ${pack.isPopular ? 'popular' : ''}">
+                <div class="panel-header-row">
+                    <div>
+                        <p class="section-label">${escapeHtml(pack.name)}</p>
+                        <h3>${pack.credits} credits</h3>
+                    </div>
+                    ${pack.isPopular ? '<span class="tag">Most popular</span>' : ''}
+                </div>
+                <div class="price">${subscriptionManager.formatPrice(price)}${comparePrice}</div>
+                <p class="muted-copy">${escapeHtml(pack.description)}</p>
+                <p class="hint-small">${(price / pack.credits / 100).toFixed(2)} per analysis</p>
+                <button class="btn btn-primary buy-pack-btn" data-pack-tier="${pack.tier}">Buy ${escapeHtml(pack.name)}</button>
+            </article>
+        `;
+    }).join('');
+
+    container.querySelectorAll('.buy-pack-btn').forEach((button) => {
+        button.addEventListener('click', async () => {
+            await handlePackPurchase(button.getAttribute('data-pack-tier'));
+        });
+    });
+}
+
+async function handlePackPurchase(packTier) {
+    try {
+        showLoading('Redirecting to Stripe...');
+        await subscriptionManager.createCheckoutSession(packTier);
+    } catch (error) {
+        showToast(error.message, 'error');
+    } finally {
+        hideLoading();
+    }
+}
+
+async function computeManuscriptHash(rawText) {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(rawText || '');
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+function getPinnedCount(analysis) {
+    return (analysis?.correspondences || []).filter((item) => Boolean(item.pin)).length;
+}
+
+async function persistSelectedPin(isRelevant) {
+    const selected = getSelectedCorrespondence();
+    if (!selected || !state.analysis?.savedId) {
+        showToast('Save the analysis before pinning correspondences.', 'warning');
+        return;
+    }
+
+    const annotation = document.getElementById('pin-annotation')?.value.trim() || '';
+    const result = await notebookManager.persistPin({
+        analysisId: state.analysis.savedId,
+        correspondenceId: selected.id,
+        annotation,
+        isRelevant
+    });
+    if (!result.success) {
+        showToast(result.error, 'error');
+        return;
+    }
+
+    state.analysis = notebookManager.getCurrentNotebook();
+    renderAnalysis();
+    renderAnalysisSummary();
+    renderNotebookLibrary();
+    showToast(isRelevant ? 'Correspondence pinned.' : 'Correspondence marked as wrong.', 'success');
+}
+
+function collectReadingListItems(pinnedOnly = false) {
+    const correspondences = (state.analysis?.correspondences || []).filter((item) => !pinnedOnly || item.pin);
+    return correspondences.flatMap((correspondence) => (correspondence.verification?.evidence || []).map((evidence, index) => ({
+        correspondenceLabel: correspondence.label,
+        evidence,
+        index
+    })));
+}
+
+function buildReadingListText(pinnedOnly = false) {
+    const items = collectReadingListItems(pinnedOnly);
+    return items.map((item) => [
+        `${item.correspondenceLabel}`,
+        `${item.evidence.title}`,
+        `${item.evidence.source || 'Unknown source'}${item.evidence.year ? ` · ${item.evidence.year}` : ''}`,
+        `${item.evidence.url || 'No URL supplied'}`,
+        `${item.evidence.summary || 'No abstract available.'}`
+    ].join('\n')).join('\n\n');
+}
+
+function buildReadingListBibtex(pinnedOnly = false) {
+    const items = collectReadingListItems(pinnedOnly);
+    return items.map((item, index) => `@article{latentlink${index + 1},\n  title = {${(item.evidence.title || 'Untitled').replace(/[{}]/g, '')}},\n  journal = {${(item.evidence.source || 'Unknown source').replace(/[{}]/g, '')}},\n  year = {${item.evidence.year || 'n.d.'}},\n  url = {${item.evidence.url || ''}},\n  note = {Correspondence: ${(item.correspondenceLabel || '').replace(/[{}]/g, '')}}\n}`).join('\n\n');
+}
+
+function buildReadingListRis(pinnedOnly = false) {
+    const items = collectReadingListItems(pinnedOnly);
+    return items.map((item) => [
+        'TY  - JOUR',
+        `TI  - ${item.evidence.title || 'Untitled'}`,
+        `JO  - ${item.evidence.source || 'Unknown source'}`,
+        `PY  - ${item.evidence.year || ''}`,
+        `UR  - ${item.evidence.url || ''}`,
+        `N1  - Correspondence: ${item.correspondenceLabel || ''}`,
+        'ER  - '
+    ].join('\n')).join('\n\n');
+}
+
+function downloadTextFile(filename, content) {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+}
+
+function showReadingListExportOptions() {
+    const pinnedOnly = window.confirm('Export pinned correspondences only? Select Cancel to export the full reading list.');
+    const format = window.prompt('Export format: plain, bibtex, or ris', 'plain');
+    if (!format) {
+        return;
+    }
+
+    const normalized = format.trim().toLowerCase();
+    const titleSlug = (state.analysis?.title || 'latentlink-reading-list').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+
+    if (normalized === 'bibtex') {
+        downloadTextFile(`${titleSlug}.bib`, buildReadingListBibtex(pinnedOnly));
+        return;
+    }
+
+    if (normalized === 'ris') {
+        downloadTextFile(`${titleSlug}.ris`, buildReadingListRis(pinnedOnly));
+        return;
+    }
+
+    downloadTextFile(`${titleSlug}.txt`, buildReadingListText(pinnedOnly));
+}
+
+function showPostAnalysisBanner() {
+    const banner = document.getElementById('post-analysis-banner');
+    if (!banner) {
+        return;
+    }
+    banner.style.display = 'block';
 }
 
 function escapeHtml(value) {

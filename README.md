@@ -1,6 +1,6 @@
 # LatentLink Webhook Server
 
-This is a standalone webhook server for handling Stripe subscription events for LatentLink.
+This is a standalone webhook server for handling Stripe credit-pack purchases and account-protection events for LatentLink v2.
 
 ## Setup
 
@@ -8,10 +8,11 @@ This is a standalone webhook server for handling Stripe subscription events for 
    - Replace the placeholder Back4App credentials with your actual App ID, JavaScript Key, and Master Key
    - The Stripe keys are already configured
 
-2. **Add metadata to your Stripe product**:
-   - Go to Stripe Dashboard → Products → Your LatentLink product
-   - Add metadata: `app` = `latentlink`
-   - This tells the webhook which Back4App app to update
+2. **Add metadata to your Stripe products and prices**:
+   - Go to Stripe Dashboard → Products → each LatentLink credit pack
+   - Add product metadata: `app` = `latentlink`
+   - Add price metadata: `pack_tier` and `credits`
+   - The webhook reads these values to create the `CreditBatch`
 
 3. **Deploy to Back4App Web Deployment**:
    - Create a new Web Deployment in Back4App
@@ -37,13 +38,13 @@ stripe listen --forward-to localhost:3000/webhook
 
 ## How It Works
 
-1. Stripe sends `checkout.session.completed` event when a user subscribes
+1. Stripe sends `checkout.session.completed` when a credit pack is purchased
 2. Webhook verifies the Stripe signature
-3. Extracts customer email and subscription ID
-4. Reads product metadata to determine which app (latentlink)
-5. Finds the user in Back4App by email
+3. Reads product metadata to determine which app (latentlink)
+4. Creates a `StripeEvent` record for idempotency
+5. Creates a `CreditBatch` with a 12-month expiration date
 6. Updates user with:
    - `stripeCustomerId`
-   - `stripeSubscriptionId`
-   - `subscriptionStatus: "active"`
-   - `usageCount: 0`
+   - `credits_balance`
+
+It also handles `charge.refunded` and `charge.dispute.created` so refunded or disputed purchases can freeze or adjust credit access.

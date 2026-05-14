@@ -26,7 +26,14 @@ class AuthManager {
             user.set('name', name);
             user.set('subscriptionStatus', 'inactive');
             user.set('usageCount', 0);
-            user.set('usageLimit', 100); // 100 discoveries per month
+            user.set('usageLimit', 100);
+            user.set('credits_balance', 0);
+            user.set('free_credits_used', false);
+            user.set('is_verified_researcher', false);
+            user.set('verification_method', null);
+            user.set('institutional_email', null);
+            user.set('orcid_id', null);
+            user.set('researcher_verified_at', null);
             
             await user.signUp();
             this.currentUser = user;

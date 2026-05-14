@@ -50,33 +50,158 @@ STRIPE_SECRET_KEY=sk_test_... (your Stripe secret key)
 STRIPE_WEBHOOK_SECRET=whsec_... (from Stripe webhook setup)
 OPENAI_API_KEY=sk-... (your OpenAI API key)
 APP_URL=https://yourdomain.com (your app URL)
+STRIPE_STARTER_PRICE_ID=price_... (5-credit pack)
+STRIPE_RESEARCHER_PRICE_ID=price_... (20-credit pack)
+STRIPE_LAB_PRICE_ID=price_... (75-credit pack)
+STRIPE_RESEARCHER_COUPON_ID=coupon_... (20% researcher discount)
 ```
+
+### 1.6 Create Back4App Classes
+
+Back4App can auto-create classes the first time the app writes to them, but for this v2 you should create the schema intentionally so field types, ACL expectations, and any indexes are correct.
+
+Create these classes in **Database Browser**:
+
+#### `_User` additions
+
+Add these fields to the built-in user class:
+
+- `credits_balance` — Number
+- `free_credits_used` — Boolean
+- `is_verified_researcher` — Boolean
+- `verification_method` — String
+- `institutional_email` — String
+- `orcid_id` — String
+- `researcher_verified_at` — Date
+- `stripeCustomerId` — String
+- `purchase_frozen` — Boolean
+- `purchase_hold_reason` — String
+
+Recommended defaults for new users:
+
+- `credits_balance = 0`
+- `free_credits_used = false`
+- `is_verified_researcher = false`
+- `purchase_frozen = false`
+
+#### `CreditBatch`
+
+Create a class named `CreditBatch` with these fields:
+
+- `user` — Pointer `_User`
+- `credits_initial` — Number
+- `credits_remaining` — Number
+- `expires_at` — Date
+- `stripe_session_id` — String
+- `stripe_payment_intent_id` — String
+- `pack_tier` — String
+- `amount_paid_cents` — Number
+- `researcher_discount_applied` — Boolean
+
+Recommended index:
+
+- Composite lookup path for credit consumption: `user`, `expires_at`, `credits_remaining`
+
+#### `Analysis`
+
+Create a class named `Analysis` with these fields:
+
+- `user` — Pointer `_User`
+- `manuscript_title` — String
+- `title` — String
+- `manuscript` — Object
+- `manuscript_text` — String
+- `manuscript_hash` — String
+- `fingerprint` — Object
+- `correspondences` — Array
+- `field_rendering` — Object
+- `renderings` — Array
+- `candidates` — Array
+- `verification_summary` — Object
+- `verificationSummary` — Object
+- `pipeline` — Array
+- `field` — String
+- `credits_charged` — Number
+- `note` — String
+- `parent_analysis` — Pointer `Analysis`
+
+Recommended index:
+
+- `user`, `updatedAt`
+- `user`, `manuscript_hash`
+
+#### `Pin`
+
+Create a class named `Pin` with these fields:
+
+- `user` — Pointer `_User`
+- `analysis` — Pointer `Analysis`
+- `correspondence_id` — String
+- `annotation` — String
+- `is_relevant` — Boolean
+
+Recommended index:
+
+- `user`, `analysis`, `correspondence_id`
+
+#### `StripeEvent`
+
+Create a class named `StripeEvent` with these fields:
+
+- `event_id` — String
+- `event_type` — String
+- `processed_at` — Date
+- `payload` — Object
+
+Recommended index:
+
+- Unique on `event_id`
+
+#### Permissions
+
+Recommended CLP posture:
+
+- `Analysis`: no public read/write, authenticated create allowed, object ACL enforced
+- `Pin`: no public read/write, authenticated create allowed, object ACL enforced
+- `CreditBatch`: no public create/update/delete from client, server-side only
+- `StripeEvent`: server-side only
+
+The current client code writes `Analysis` and `Pin` directly through Parse, so those two classes must allow authenticated client writes unless you move those saves into Cloud Code.
 
 ---
 
 ## Step 2: Stripe Setup
 
-### 2.1 Create a Product
+### 2.1 Create Credit-Pack Products
 
 1. Log in to Stripe Dashboard
-2. Go to **Products** → **Add Product**
-3. Name: "LatentLink Subscription"
-4. Description: "Monthly subscription to LatentLink"
-5. Pricing: **$9.99/month** (recurring)
-6. Click **Save product**
-7. Copy the **Price ID** (starts with `price_...`)
+2. Create three one-time products: Starter, Researcher, Lab
+3. Add one one-time price to each product
+4. Add price metadata:
+   - `pack_tier`: `starter` | `researcher` | `lab`
+   - `credits`: `5` | `20` | `75`
+5. Add product metadata: `app=latentlink`
+6. Copy each **Price ID** into the corresponding environment variable above
+7. Optionally create a 20% off coupon and store its ID in `STRIPE_RESEARCHER_COUPON_ID`
+
+Use these exact products/prices:
+
+- Starter Pack: 5 credits, `$19`
+- Researcher Pack: 20 credits, `$59`
+- Lab Pack: 75 credits, `$179`
+
+If you use the coupon flow in the current code, do not create separate discounted prices. The verified-researcher discount is applied by `STRIPE_RESEARCHER_COUPON_ID` at checkout.
 
 ### 2.2 Set Up Webhook
 
 1. Go to **Developers** → **Webhooks**
 2. Click **Add endpoint**
-3. Endpoint URL: `https://parseapi.back4app.com/functions/stripeWebhook`
+3. Endpoint URL: your deployed webhook receiver + `/webhook`
 4. Select these events:
    - `checkout.session.completed`
-   - `customer.subscription.updated`
-   - `customer.subscription.deleted`
-   - `invoice.payment_succeeded`
-   - `invoice.payment_failed`
+   - `payment_intent.payment_failed`
+   - `charge.refunded`
+   - `charge.dispute.created`
 5. Click **Add endpoint**
 6. Copy the **Signing secret** (starts with `whsec_...`)
 7. Add this to Back4App environment variables as `STRIPE_WEBHOOK_SECRET`
@@ -104,8 +229,7 @@ const BACK4APP_CONFIG = {
 };
 
 const STRIPE_CONFIG = {
-    publishableKey: 'pk_test_...', // From Stripe
-    priceId: 'price_...' // From Stripe Product
+   publishableKey: 'pk_test_...' // From Stripe
 };
 ```
 
@@ -148,7 +272,8 @@ Open `http://localhost:8888/`
 
 1. Create a new account
 2. Verify email (if enabled)
-3. Should see subscription page
+3. Should see the main workspace if the free analysis is unused
+4. If free analysis is already used and no paid credits exist, the pricing page should appear
 
 ### 5.2 Test Stripe Checkout
 
@@ -159,11 +284,12 @@ Use Stripe test cards:
 
 ### 5.3 Test Discovery Flow
 
-1. After subscribing, should see main app
-2. Select domains and search
-3. Click "Discover Connections"
-4. Verify AI responses work
-5. Check usage counter updates
+1. Run the first analysis without a paid credit
+2. Confirm `_User.free_credits_used` flips to `true`
+3. Buy a test credit pack in Stripe Checkout
+4. Confirm a `CreditBatch` row is created by the webhook
+5. Confirm `_User.credits_balance` increases
+6. Run another fresh analysis and confirm balance decrements by `1`
 
 ---
 
@@ -182,9 +308,9 @@ In Back4App, update all environment variables to production values.
 ### 6.3 Test Production
 
 1. Create real account
-2. Make real $9.99 payment
-3. Test full flow
-4. Verify webhooks work
+2. Make a real credit-pack purchase
+3. Test full analysis flow
+4. Verify webhooks create `CreditBatch` rows and increment `credits_balance`
 
 ---
 
@@ -194,14 +320,15 @@ In Back4App, update all environment variables to production values.
 
 Monitor in Back4App Dashboard:
 - **Database Browser** → **User** class
-- Check `usageCount` and `subscriptionStatus` fields
+- Check `credits_balance`, `free_credits_used`, and researcher verification fields
+- Check `CreditBatch`, `Analysis`, `Pin`, and `StripeEvent` rows
 
 ### Stripe Dashboard
 
 Monitor:
-- Active subscriptions
+- Completed checkouts
 - Failed payments
-- Churn rate
+- Refunds and disputes
 
 ### OpenAI Usage
 
@@ -218,14 +345,11 @@ Monitor API costs:
 - Verify Parse SDK is loaded
 - Check browser console for errors
 
-### "Active subscription required" Error
-- Verify Stripe webhook is working
-- Check user's `subscriptionStatus` in Back4App database
-- Ensure webhook secret is correct
-
-### "Monthly usage limit reached" Error
-- User has hit 100 discoveries/month
-- Reset manually in database or wait for next billing cycle
+### "No credits available" Error
+- Check `_User.free_credits_used`
+- Check `_User.credits_balance`
+- Confirm a non-expired `CreditBatch` exists
+- Ensure webhook secret and price metadata are correct
 
 ### Stripe Webhook Not Working
 - Verify endpoint URL is correct

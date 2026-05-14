@@ -147,16 +147,34 @@
 
         <div id="subscription-section" class="section-panel" style="display: none;">
             <div class="panel-block pricing-shell accent-border">
-                <p class="section-label">Subscription</p>
-                <h2>Upgrade for ongoing runs</h2>
-                <p class="hint">Premium keeps unlimited saved analyses and a larger monthly run budget.</p>
-                <div class="pricing-row">
-                    <div>
-                        <div class="price">$9.99<span>/month</span></div>
-                        <p class="muted-copy">Keep the existing Stripe subscription flow while the v2 engine ships.</p>
+                <p class="section-label">Credits</p>
+                <h2>Buy persistent research workspaces</h2>
+                <p id="researcher-banner" class="hint">Verify as a researcher to save 20% on any credit pack.</p>
+
+                <div class="verification-shell">
+                    <div class="verification-card">
+                        <p class="mini-label">A</p>
+                        <h3>Institutional Email</h3>
+                        <p class="muted-copy">Use a university, lab, or research-domain email to unlock the discount.</p>
+                        <div class="form-group">
+                            <input type="email" id="institutional-email" class="input" placeholder="name@institution.edu">
+                        </div>
+                        <button id="verify-email-btn" class="btn btn-secondary">Verify Email</button>
                     </div>
-                    <button id="subscribe-btn" class="btn btn-primary">Subscribe</button>
+
+                    <div class="verification-card">
+                        <p class="mini-label">B</p>
+                        <h3>ORCID</h3>
+                        <p class="muted-copy">Independent and industry researchers can verify with an ORCID iD.</p>
+                        <div class="form-group">
+                            <input type="text" id="orcid-id" class="input" placeholder="0000-0002-1825-0097">
+                        </div>
+                        <button id="verify-orcid-btn" class="btn btn-secondary">Verify ORCID</button>
+                    </div>
                 </div>
+
+                <div id="pricing-cards" class="pricing-card-grid"></div>
+                <p class="hint-small">Credits expire 12 months after purchase. Opening saved analyses, drilling into correspondences, pinning, and exports stay free.</p>
             </div>
         </div>
 
@@ -164,10 +182,27 @@
             <div class="panel-block">
                 <div class="panel-header-row">
                     <div>
-                        <p class="section-label">Session Library</p>
+                        <p class="section-label">Analysis Library</p>
                         <h2>Saved analyses</h2>
                     </div>
-                    <button id="back-to-app-btn" class="btn btn-secondary">Back To Workspace</button>
+                    <div class="action-row">
+                        <button id="open-pricing-btn" class="btn btn-secondary">Buy Credits</button>
+                        <button id="back-to-app-btn" class="btn btn-secondary">Back To Workspace</button>
+                    </div>
+                </div>
+                <div class="library-toolbar">
+                    <div class="form-group library-search">
+                        <label for="library-search">Search by manuscript title</label>
+                        <input type="search" id="library-search" class="input" placeholder="Search saved analyses">
+                    </div>
+                    <div class="form-group library-sort">
+                        <label for="library-sort">Sort</label>
+                        <select id="library-sort" class="select">
+                            <option value="date">Newest first</option>
+                            <option value="title">Title</option>
+                            <option value="pinned">Pinned correspondences</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="notebooks-list" class="notebooks-grid"></div>
             </div>
@@ -251,6 +286,17 @@
             </section>
 
             <section class="results-column section-panel">
+                <div id="post-analysis-banner" class="panel-block post-analysis-banner" style="display: none;">
+                    <div class="panel-header-row wide-gap">
+                        <div>
+                            <p class="section-label">Next Step</p>
+                            <h3>Your first artifact is saved</h3>
+                            <p class="muted-copy">Get 5 more analyses for $19, or $15 once researcher verification is on file.</p>
+                        </div>
+                        <button id="banner-buy-starter-btn" class="btn btn-primary">Buy Starter Pack</button>
+                    </div>
+                </div>
+
                 <div class="panel-block hero-results">
                     <div class="panel-header-row wide-gap">
                         <div>
@@ -311,11 +357,11 @@
 
         <div id="upgrade-modal" class="modal" style="display: none;">
             <div class="modal-content">
-                <p class="section-label">Upgrade</p>
-                <h3>Premium required for more saved runs</h3>
-                <p id="upgrade-message">Upgrade to continue.</p>
+                <p class="section-label">Credits</p>
+                <h3>Buy credits to keep running new analyses</h3>
+                <p id="upgrade-message">A new analysis uses 1 credit.</p>
                 <div class="modal-buttons">
-                    <button id="upgrade-now-btn" class="btn btn-primary">Upgrade Now</button>
+                    <button id="upgrade-now-btn" class="btn btn-primary">Open Pricing</button>
                     <button id="close-upgrade-modal" class="btn btn-secondary">Close</button>
                 </div>
             </div>

@@ -32,7 +32,5 @@ if (document.readyState === 'loading') {
 
 // Stripe Configuration
 const STRIPE_CONFIG = {
-    publishableKey: 'pk_live_51OzirFRpZt3bNy6s82Z9QmDL08E5s13Kr8D6dVsUWXAQbRJTDykQzIAEDI6U5WqcPRdtOtkwPN5ZBEnDrnP926ls00t5N2ZewA',
-    priceId: 'price_1SPRdXRpZt3bNy6sPlp0255H',
-    paymentLink: 'https://buy.stripe.com/8x214p3Vk0sdf7J4zDaEE0h'
+    publishableKey: 'pk_live_51OzirFRpZt3bNy6s82Z9QmDL08E5s13Kr8D6dVsUWXAQbRJTDykQzIAEDI6U5WqcPRdtOtkwPN5ZBEnDrnP926ls00t5N2ZewA'
 };
